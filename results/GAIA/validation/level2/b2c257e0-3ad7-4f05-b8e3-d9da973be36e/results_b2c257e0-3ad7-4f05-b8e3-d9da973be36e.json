@@ -1,24 +1,24 @@
 {
   "eval": {
-    "model": "google/gemini-2.5-flash-preview",
-    "score": 100.0,
+    "model": "anthropic/claude-3.7-sonnet",
+    "score": 0.0,
     "score_level1": 0,
-    "score_level2": 100.0,
+    "score_level2": 0.0,
     "score_level3": 0,
-    "date": "2025-04-30 14:30:59"
+    "date": "2025-04-24 16:03:24"
   },
   "detail": [
     {
-      "input": "Please answer the question below. \n\nF:/gitlab/NAE-Manus-gaia-22/workspace/20250430_142756/b2c257e0-3ad7-4f05-b8e3-d9da973be36e/b2c257e0-3ad7-4f05-b8e3-d9da973be36e.jpg\n\nHere is the question:\n\nIf this whole pint is made up of ice cream, how many percent above or below the US federal standards for butterfat content is it when using the standards as reported by Wikipedia in 2020? Answer as + or - a number rounded to one decimal place.",
+      "input": "Please answer the question below. You should:\n\n- Return only your answer, which should be a number, or a short phrase with as few words as possible, or a comma separated list of numbers and/or strings.\n- If the answer is a number, return only the number without any units unless specified otherwise.\n- If the answer is a string, don't include articles, and don't use abbreviations (e.g. for states).\n- If the answer is a comma separated list, apply the above rules to each element in the list.\n\nF:/gitlab/NAE-Manus-gaia-22/workspace/20250424_154725/b2c257e0-3ad7-4f05-b8e3-d9da973be36e/b2c257e0-3ad7-4f05-b8e3-d9da973be36e.jpg\n\nHere is the question:\n\nIf this whole pint is made up of ice cream, how many percent above or below the US federal standards for butterfat content is it when using the standards as reported by Wikipedia in 2020? Answer as + or - a number rounded to one decimal place.",
       "task_id": "b2c257e0-3ad7-4f05-b8e3-d9da973be36e",
       "Question": "If this whole pint is made up of ice cream, how many percent above or below the US federal standards for butterfat content is it when using the standards as reported by Wikipedia in 2020? Answer as + or - a number rounded to one decimal place.",
       "Level": 2,
       "Final answer": "+4.6",
-      "model_answer": "+4.6",
+      "model_answer": "-23.6",
       "error": null,
       "file_name": "b2c257e0-3ad7-4f05-b8e3-d9da973be36e.jpg",
-      "score": 1,
-      "elapsed time": "0:03:02.557386"
+      "score": 0,
+      "elapsed time": "0:06:22.525525"
     }
   ]
 }

@@ -1,23 +1,9 @@
-# Copyright 2025 ZTE Corporation.
-# All Rights Reserved.
-#
-#    Licensed under the Apache License, Version 2.0 (the "License"); you may
-#    not use this file except in compliance with the License. You may obtain
-#    a copy of the License at
-#
-#         http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-#    License for the specific language governing permissions and limitations
-#    under the License.
-
 import os
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Literal, Optional, TypeAlias, Union
 from functools import wraps
 import time
+from app.manus.tool.google_api_key import apikeys
 import requests
 
 
@@ -430,6 +416,7 @@ class SearchToolkit:
         GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         # https://cse.google.com/cse/all
         SEARCH_ENGINE_ID = os.getenv("SEARCH_ENGINE_ID")
+        GOOGLE_API_KEY, SEARCH_ENGINE_ID = apikeys.get(GOOGLE_API_KEY, SEARCH_ENGINE_ID)
 
         # Using the first page
         start_page_idx = 1
@@ -490,10 +477,12 @@ class SearchToolkit:
                     responses.append(response)
             else:
                 responses.append({"error": "google search failed. 'items' not in data"})
+                apikeys.next()
 
         except requests.RequestException as e:
             # Handle specific exceptions or general request exceptions
             responses.append({"error": f"google search failed. {e}"})
+            apikeys.next()
         # If no answer found, return an empty list
         print(f'google_search execute result = {responses}')
         return responses
