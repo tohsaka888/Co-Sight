@@ -59,6 +59,7 @@ class DocumentProcessingToolkit:
             self._client = OpenAI(**llm_config)
         return self._client
 
+    @format_check()
     def ask_question_about_document(self, document_path: str, task_prompt: str) -> str:
         r"""Extract content from a document and use it as context to answer a task prompt using LLM.
 
@@ -75,14 +76,15 @@ class DocumentProcessingToolkit:
         # print(f"document_content:{document_content}")
 
         # Split content into chunks of 20,000 characters
-        chunk_size = 20000
+        chunk_size = 1000000
         content_chunks = [document_content[i:i + chunk_size]
                           for i in range(0, len(document_content), chunk_size)]
 
-        full_response = ""
+        full_response = "Result: "
 
         # Process each chunk sequentially
         for chunk in content_chunks:
+            print("chunk")
             # Prepare the LLM request for this chunk
             completion = self.client.chat.completions.create(
                 extra_headers={'Content-Type': 'application/json',
@@ -299,10 +301,10 @@ class DocumentProcessingToolkit:
         return extracted_files
 
 
-llm_config = get_model_config()
-print("here")
-tool=DocumentProcessingToolkit(llm_config=llm_config, cache_dir=None)
-print("here")
-
-result=tool.ask_question_about_document(r"F:\project\agent\Co-Sight\workspace\20250527_142235\114d5fd0-e2ae-4b6d-a65a-870da2d19c08\book.pdf","In the endnote found in the second-to-last paragraph of page 11 of the book with the doi 10.2307/j.ctv9b2xdv, what date in November was the Wikipedia article accessed? Just give the day of the month.")
-print(result)
+# llm_config = get_model_config()
+# print("here")
+# tool=DocumentProcessingToolkit(llm_config=llm_config, cache_dir=None)
+# print("here")
+#
+# result=tool.ask_question_about_document(r"F:\project\agent\Co-Sight\workspace\20250527_142235\114d5fd0-e2ae-4b6d-a65a-870da2d19c08\book.pdf","In the endnote found in the second-to-last paragraph of page 11 of the book with the doi 10.2307/j.ctv9b2xdv, what date in November was the Wikipedia article accessed? Just give the day of the month.")
+# print(result)

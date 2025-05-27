@@ -66,7 +66,10 @@ class TaskActorAgent(BaseAgent):
                                    "model": vision_llm.model,
                                    "temperature": vision_llm.temperature,
                                    "api_key": vision_llm.api_key})
-        doc_toolkit = DocumentProcessingToolkit()
+        doc_toolkit = DocumentProcessingToolkit({"base_url": tool_llm.base_url,
+                                    "model": tool_llm.model,
+                                    "temperature": tool_llm.temperature,
+                                    "api_key": tool_llm.api_key})
         search_toolkit = SearchToolkit()
         arxiv_toolkit = ArxivToolkit()
         code_toolkit = CodeToolkit(sandbox="subprocess")
@@ -84,7 +87,8 @@ class TaskActorAgent(BaseAgent):
             "ask_question_about_image": image_toolkit.ask_question_about_image,
             "ask_question_about_video": video_toolkit.ask_question_about_video,
             "fetch_website_content": fetch_website_content,
-            "extract_document_content": doc_toolkit.extract_document_content,
+            # "extract_document_content": doc_toolkit.extract_document_content,
+            "ask_question_by_extract_document_content": doc_toolkit.ask_question_about_document,
             "search_papers": arxiv_toolkit.search_papers,
             "download_papers": arxiv_toolkit.download_papers,
             "download_file": download_file,

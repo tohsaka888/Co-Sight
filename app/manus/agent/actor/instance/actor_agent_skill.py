@@ -705,6 +705,40 @@ def extract_document_content_skill():
     }
 
 
+def ask_question_by_extract_document_content_skill():
+    return {
+        'skill_name': 'ask_question_by_extract_document_content',
+        'skill_type': "function",
+        'display_name_zh': '读取文件内容并提问',
+        'display_name_en': 'Read file content and ask questions',
+        'description_zh': '读取jsonl、json、jsonld、zip、md、py、xml、docx、pptx、pdf等类型文件内容，并根据任务描述提出问题',
+        'description_en': 'Read contents from files (jsonl, json, jsonld, zip, md, py, xml, docx, pptx, pdf, etc.) and ask questions based on task description',
+        'semantic_apis': ["api_search"],
+        'function': SkillFunction(
+            id='8d5e7f3b-a4c2-4d1b-9f6e-2c8b9d7e1234',
+            name='zagents_framework.app.manus.tool.deep_search_toolkit.deep_search',
+            description_zh='读取文件内容并根据任务描述提出问题',
+            description_en='Read file content and ask questions based on task description',
+            parameters={
+                "type": "object",
+                "properties": {
+                    "document_path": {
+                        "type": "string",
+                        "description_zh": "文件路径",
+                        "description_en": "File path"
+                    },
+                    "task_prompt": {
+                        "type": "string",
+                        "description_zh": "任务内容描述",
+                        "description_en": "Task description"
+                    }
+                },
+                "required": ["document_path", "task_prompt"]
+            }
+        )
+    }
+
+
 def html_visualization_skill():
     return {
         'skill_name': 'create_visualization',

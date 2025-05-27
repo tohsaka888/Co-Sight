@@ -59,14 +59,13 @@ Please note that our overall task may be very complicated. Here are some tips th
 - If the question mentions youtube video, in most cases you have to process the content of the mentioned video.
 - For downloading files, you can either use the web browser simulation toolkit or write codes (for example, the github content can be downloaded via https://raw.githubusercontent.com/...).
 - Flexibly write codes to solve some problems, such as excel relevant tasks.
-- If the URL points to a PDF, do not extract webpage content. Instead, download the file and extract content from the local PDF py python code ,正则匹配的方式获取内容,not use extract_document_content
+- If the URL points to a PDF, do not extract webpage content. Instead, download the file and extract content from the local PDF, use extract_document_content
 - Do not ask for my suggestions, just execute directly
 - 优先使用kiwi search，其次使用google search
 - 代码中网络调用时，需要配上网络代理
 - 如果google_search查找不到答案，爬取某个网页的详细内容，如果还不能使用浏览器进行我网页操作
 - When writing Python code, always ensure all variables are properly defined before use. Double check for undefined variables, especially in loops and conditional statements. Use try-except blocks to handle potential undefined variable cases.
 - 代码生成文件操作需要设置成utf-8编码
-- 文件是有封面和目录页的，任务中的页数不准，使用全局匹配的方式获取信息，如11页不是数量的第11页而是除封面目前页的11页，请全局搜搜
 </tips>
 
 # Environment Information
