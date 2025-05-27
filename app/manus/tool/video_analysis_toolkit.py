@@ -15,6 +15,8 @@
 
 from dotenv import load_dotenv
 
+from ..gate.format_gate import format_check
+
 load_dotenv()
 import os
 from openai import OpenAI
@@ -123,6 +125,7 @@ class VideoTool:
         print(f'ask_question_about_video result {full_response}')
         return full_response
 
+    @format_check()
     def ask_question_about_video(self, video_path: str, question: str, ):
         print(f"Using Tool: {self.name}")
         return asyncio.run(self.video_analy(video_path, question))

@@ -20,6 +20,10 @@ from camel.toolkits import (
     ExcelToolkit
 )
 
+from app.manus.gate.format_gate import format_check
+
+
+@format_check()
 def extract_excel_content(document_path: str):
     excelToolkit = ExcelToolkit()
     result = excelToolkit.extract_excel_content(document_path)

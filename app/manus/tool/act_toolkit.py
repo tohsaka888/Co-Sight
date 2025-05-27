@@ -16,6 +16,7 @@
 import traceback
 from typing import Optional
 
+from app.manus.gate.format_gate import format_check
 from app.manus.task.todolist import Plan
 
 
@@ -25,6 +26,7 @@ class ActToolkit:
     def __init__(self, plan: Optional[Plan] = None):
         self.plan = plan
 
+    @format_check()
     def mark_step(self, step_index: int, step_status: str=None, step_notes: str=None, **kwargs) -> str:
         r"""Mark a single step with specific status and notes.
 
@@ -41,7 +43,7 @@ class ActToolkit:
                 - Absolute file paths of any generated files
 
         Returns:
-            dict: Success to mark step
+            str: Success to mark step
         """
         # Infer step_status from kwargs if not provided
         try:

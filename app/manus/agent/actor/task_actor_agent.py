@@ -13,29 +13,31 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import traceback
 from typing import Dict
 
-from app.manus.llm.chat_llm import ChatLLM
 from app.agent_dispatcher.infrastructure.entity.AgentInstance import AgentInstance
-from app.manus.agent.actor.prompt.actor_prompt import actor_system_prompt, actor_execute_task_prompt
+from app.manus.agent.actor.prompt.actor_prompt import actor_system_prompt, actor_execute_task_prompt, \
+    update_facts_prompt
 from app.manus.agent.base.base_agent import BaseAgent
+from app.manus.llm.chat_llm import ChatLLM
 from app.manus.task.plan_report_manager import plan_report_event_manager
 from app.manus.task.task_manager import TaskManager
 from app.manus.task.time_record_util import time_record
 from app.manus.tool.act_toolkit import ActToolkit
 from app.manus.tool.arxiv_toolkit import ArxivToolkit
+from app.manus.tool.audio_toolkit import AudioTool
+from app.manus.tool.browser_simulation import brower_use_cal
 from app.manus.tool.code_toolkit import CodeToolkit
 from app.manus.tool.document_processing_toolkit import DocumentProcessingToolkit
+from app.manus.tool.file_download_toolkit import download_file
 from app.manus.tool.file_toolkit import FileToolkit
+from app.manus.tool.google_search_util import search_google
+from app.manus.tool.image_analysis_toolkit import VisionTool
 from app.manus.tool.scrape_website_toolkit import fetch_website_content
 from app.manus.tool.search_toolkit import SearchToolkit
 from app.manus.tool.terminate_toolkit import TerminateToolkit
-from app.manus.tool.audio_toolkit import AudioTool
 from app.manus.tool.video_analysis_toolkit import VideoTool
-from app.manus.tool.image_analysis_toolkit import VisionTool
-from app.manus.tool.file_download_toolkit import download_file
-from app.manus.tool.browser_simulation import brower_use_cal
-import traceback
 
 
 class TaskActorAgent(BaseAgent):
@@ -100,14 +102,22 @@ class TaskActorAgent(BaseAgent):
         self.history.append(
             {"role": "user", "content": actor_execute_task_prompt(question, step_index, self.plan)})
         try:
-            result = self.execute(self.history, step_index=step_index)
+            result = self.execute(self.history, step_index=step_index, plan=self.plan)
             if self.plan.step_statuses.get(self.plan.steps[step_index], "") == "in_progress":
                 self.plan.mark_step(step_index, step_status="completed", step_notes=str(result))
+            self.update_fact(question)
             return result
         except Exception as e:
             self.plan.mark_step(step_index, step_status="blocked", step_notes=str(e))
             print(traceback.format_exc())
             return str(e)
+
+    def update_fact(self, question):
+        self.history.append({"role": "user", "content": update_facts_prompt(question, self.plan.facts)})
+        result = self.llm.chat_to_llm(self.history)
+        self.history.append({"role": "assistant", "content": result})
+        self.plan.update_facts(result)
+        return result
 
     def single_act(self, question):
         execute_task_prompt = f"""
@@ -116,7 +126,7 @@ Think carefully step by step to execute the current task. If there are available
 """
         self.history.append({"role": "user", "content": execute_task_prompt})
         try:
-            result = self.execute(self.history)
+            result = self.execute(self.history, plan=self.plan)
             return result
         except Exception as e:
             print(traceback.format_exc())

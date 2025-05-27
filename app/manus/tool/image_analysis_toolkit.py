@@ -15,6 +15,8 @@
 
 from dotenv import load_dotenv
 
+from ..gate.format_gate import format_check
+
 load_dotenv()
 import os
 from openai import OpenAI
@@ -117,6 +119,7 @@ class VisionTool():
         print(f'ask_question_about_image result {full_response}')
         return full_response
 
+    @format_check()
     def ask_question_about_image(self, image_path_url, task_prompt):
         print(f"Using Tool: {self.name}")
         return asyncio.run(self._run(image_path_url, task_prompt))

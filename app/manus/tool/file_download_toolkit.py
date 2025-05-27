@@ -22,7 +22,10 @@ from tqdm import tqdm
 import subprocess
 import re
 
+from app.manus.gate.format_gate import format_check
 
+
+@format_check()
 def download_file(url, dest_path):
     chunk_size = 1024
     # 获取已下载文件大小（断点续传）

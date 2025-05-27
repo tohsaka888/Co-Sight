@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Union, Any
 import re
 import uuid
 from app.manus import WORKSPACE_PATH
+from app.manus.gate.format_gate import format_check
 
 
 class HTMLVisualizationToolkit:
@@ -57,7 +58,8 @@ class HTMLVisualizationToolkit:
             'dark': self._get_dark_theme_css,
             'professional': self._get_professional_theme_css
         }
-        
+
+    @format_check()
     def create_visualization(self, 
                             chart_type: str,
                             data: str,

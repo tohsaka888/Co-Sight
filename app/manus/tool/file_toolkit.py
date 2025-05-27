@@ -14,8 +14,13 @@
 #    under the License.
 
 import os
+import re
 import traceback
 from pathlib import Path
+
+from backports.tarfile import DEFAULT_FORMAT
+
+from app.manus.gate.format_gate import format_check
 
 default_encoding: str = "utf-8"
 
@@ -24,6 +29,7 @@ class FileToolkit:
     def __init__(self):
         pass
 
+    @format_check()
     def file_saver(self, content: str | bytes, file_path: str, mode: str = "a", binary: bool = False) -> str:
         r"""Save content to a file at the specified path. Supports both text and binary files. Default mode is append to preserve existing content.
 
@@ -64,6 +70,7 @@ class FileToolkit:
             print(f"failed to save file: {e}", traceback.format_exc())
             return f"Error saving file: {str(e)}"
 
+    @format_check()
     def file_read(self, file: str, start_line: int = None, end_line: int = None, sudo: bool = False, binary: bool = False) -> str | bytes:
         r"""Read file content. Supports both text and binary files.
 
@@ -109,6 +116,7 @@ class FileToolkit:
         except Exception as e:
             return f"Error reading file: {str(e)}"
 
+    @format_check()
     def file_str_replace(self, file: str, old_str: str, new_str: str, sudo: bool = False) -> str:
         r"""Replace specified string in a text file. Supports text-based formats like txt, markdown, etc.
 
@@ -150,6 +158,7 @@ class FileToolkit:
         except Exception as e:
             return f"Error replacing string in file: {str(e)}"
 
+    @format_check()
     def file_find_in_content(self, file: str, regex: str, sudo: bool = False) -> str:
         r"""Search for matching text within text file content. Supports text-based formats like txt, markdown, etc.
 
@@ -401,7 +410,7 @@ class FileToolkit:
         safe = re.sub(r'[^\w\-.]', '_', filename)
         return safe
 
-
+    @format_check()
     def write_to_file(
             self,content: str | bytes, file_path: str, mode: str = "a", binary: bool = False
     ) -> str:

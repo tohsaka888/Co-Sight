@@ -13,11 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import re
-from typing import List, Optional, Dict, Tuple
+import json
 import os
 import platform
+import re
+from datetime import datetime
 from pathlib import PureWindowsPath, PurePosixPath
+from typing import List, Optional, Dict, Tuple
 
 
 class Plan:
@@ -31,11 +33,14 @@ class Plan:
         self.step_notes = {step: "" for step in self.steps}
         self.step_details = {step: "" for step in self.steps}
         self.step_files = {step: "" for step in self.steps}
+        # 新增：步骤执行工具记录
+        self.step_tools = {step: [] for step in self.steps}  # 记录每个步骤使用的工具
+        self.facts = ""
         # 使用邻接表表示依赖关系
         if dependencies:
             self.dependencies = dependencies
         else:
-            self.dependencies = {i: [i-1] for i in range(1, len(self.steps))} if len(self.steps) > 1 else {}
+            self.dependencies = {i: [i - 1] for i in range(1, len(self.steps))} if len(self.steps) > 1 else {}
         self.result = ""
 
     def set_plan_result(self, plan_result):
@@ -43,6 +48,10 @@ class Plan:
 
     def get_plan_result(self):
         return self.result
+
+    def update_facts(self, new_fact):
+        print(f"facts of plan:{new_fact}")
+        self.facts = new_fact
 
     def get_ready_steps(self) -> List[int]:
         """获取所有前置依赖都已完成的步骤索引
@@ -76,6 +85,7 @@ class Plan:
             new_statuses = {}
             new_notes = {}
             new_details = {}
+            new_tools = {}  # 新增：用于保存工具记录
 
             # First, process all steps in the input order
             for step in steps:
@@ -85,32 +95,35 @@ class Plan:
                     new_statuses[step] = self.step_statuses.get(step)
                     new_notes[step] = self.step_notes.get(step)
                     new_details[step] = self.step_details.get(step)
+                    new_tools[step] = self.step_tools.get(step, [])  # 保留工具记录
                 # If step exists in current steps and is not started, preserve as not_started
                 elif step in self.steps:
                     new_steps.append(step)
                     new_statuses[step] = "not_started"
                     new_notes[step] = self.step_notes.get(step)
                     new_details[step] = self.step_details.get(step)
+                    new_tools[step] = []  # 重置工具记录
                 # If step is new, add as not_started
                 else:
                     new_steps.append(step)
                     new_statuses[step] = "not_started"
                     new_notes[step] = ""
                     new_details[step] = ""
+                    new_tools[step] = []  # 初始化空工具记录
 
             self.steps = new_steps
             self.step_statuses = new_statuses
             self.step_notes = new_notes
             self.step_details = new_details
+            self.step_tools = new_tools  # 更新工具记录
         print(f"before update dependencies: {self.dependencies}")
         if dependencies:
             self.dependencies.clear()
             dependencies = {int(k): v for k, v in dependencies.items()}
             self.dependencies.update(dependencies)
         else:
-            self.dependencies = {i: [i-1] for i in range(1, len(steps))} if len(steps) > 1 else {}
+            self.dependencies = {i: [i - 1] for i in range(1, len(steps))} if len(steps) > 1 else {}
         print(f"after update dependencies: {self.dependencies}")
-
 
     def mark_step(self, step_index: int, step_status: Optional[str] = None, step_notes: Optional[str] = None) -> None:
         """Mark a single step with specific statuses, notes, and details.
@@ -136,7 +149,6 @@ class Plan:
             self.step_notes[step] = step_notes
             self.step_files[step] = file_path_info
 
-
     def get_progress(self) -> Dict[str, int]:
         """Get progress statistics of the plan."""
         return {
@@ -146,6 +158,46 @@ class Plan:
             "blocked": sum(1 for status in self.step_statuses.values() if status == "blocked"),
             "not_started": sum(1 for status in self.step_statuses.values() if status == "not_started")
         }
+
+    def record_tool_execution(self, step_index: int, tool_name: str, tool_args: Dict, result: str):
+        """记录工具执行结果并更新步骤进度
+        
+        Args:
+            step_index (int): 步骤索引
+            tool_name (str): 工具名称
+            tool_args (Dict): 工具入参
+            result (str): 工具执行结果
+        """
+        if step_index < 0 or step_index >= len(self.steps):
+            raise ValueError(f"Invalid step_index: {step_index}")
+
+        step = self.steps[step_index]
+
+        # 创建唯一标识：工具名称 + 入参的JSON字符串
+        tool_id = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
+
+        # 直接追加新记录
+        self.step_tools[step].append({
+            "tool_id": tool_id,  # 唯一标识
+            "tool": tool_name,
+            "args": tool_args,  # 记录工具入参
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    def get_step_execution_history(self, step_index: int) -> List[Dict]:
+        """获取步骤的执行历史记录
+        
+        Args:
+            step_index (int): 步骤索引
+            
+        Returns:
+            List[Dict]: 工具执行历史记录
+        """
+        if step_index < 0 or step_index >= len(self.steps):
+            raise ValueError(f"Invalid step_index: {step_index}")
+
+        return self.step_tools[self.steps[step_index]]
 
     def format(self, with_detail: bool = False) -> str:
         """Format the plan for display."""
@@ -172,10 +224,14 @@ class Plan:
                 "blocked": "[!]",
             }.get(self.step_statuses.get(step), "[ ]")
 
-            # 显示依赖关系
             deps = self.dependencies.get(i, [])
             dep_str = f" (depends on: {', '.join(map(str, deps))})" if deps else ""
             output += f"Step{i} :{status_symbol} {step}{dep_str}\n"
+            if with_detail and self.step_tools.get(step):
+                output += "   Tool Execution History:\n"
+                for tool_exec in self.step_tools[step]:
+                    output += f"     -Tool: {tool_exec['tool']} (args: {tool_exec['args']}) ({tool_exec['timestamp']}): {tool_exec['result'][:100]}\n"
+
             if self.step_notes.get(step):
                 output += f"   Notes: {self.step_notes.get(step)}\nDetails: {self.step_details.get(step)}\n" if with_detail else f"   Notes: {self.step_notes.get(step)}\n"
 

@@ -15,7 +15,10 @@
 
 from pptx import Presentation
 
+from app.manus.gate.format_gate import format_check
 
+
+@format_check()
 def extract_pptx_content(pptx_path: str) -> str:
     print(f'read {pptx_path}')
     prs = Presentation(pptx_path)

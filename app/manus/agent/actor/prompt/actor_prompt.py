@@ -59,23 +59,60 @@ Please note that our overall task may be very complicated. Here are some tips th
 - If the question mentions youtube video, in most cases you have to process the content of the mentioned video.
 - For downloading files, you can either use the web browser simulation toolkit or write codes (for example, the github content can be downloaded via https://raw.githubusercontent.com/...).
 - Flexibly write codes to solve some problems, such as excel relevant tasks.
-- If the URL points to a PDF, do not extract webpage content. Instead, download the file and extract content from the local PDF
+- If the URL points to a PDF, do not extract webpage content. Instead, download the file and extract content from the local PDF py python code ,正则匹配的方式获取内容,not use extract_document_content
 - Do not ask for my suggestions, just execute directly
+- 优先使用kiwi search，其次使用google search
+- 代码中网络调用时，需要配上网络代理
+- 如果google_search查找不到答案，爬取某个网页的详细内容，如果还不能使用浏览器进行我网页操作
+- When writing Python code, always ensure all variables are properly defined before use. Double check for undefined variables, especially in loops and conditional statements. Use try-except blocks to handle potential undefined variable cases.
+- 代码生成文件操作需要设置成utf-8编码
+- 文件是有封面和目录页的，任务中的页数不准，使用全局匹配的方式获取信息，如11页不是数量的第11页而是除封面目前页的11页，请全局搜搜
 </tips>
 
 # Environment Information
 - Operating System: {platform.platform()}
 - WorkSpace: {os.getenv("WORKSPACE_PATH") or os.getcwd()}
-- Encoding: UTF-8 (must be used for all file operations)
+- Encoding: UTF-8 (must be used for all file operations and python code read/write)
+- Language: English
+- 网络代理：{os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")}
 """
     return system_prompt
 
 def actor_execute_task_prompt(task, step_index, plan):
+    workspace_path = os.getenv("WORKSPACE_PATH") or os.getcwd()
+    try:
+        files_list = "\n".join([f"  - {f}" for f in os.listdir(workspace_path)])
+    except Exception as e:
+        files_list = f"  - Error listing files: {str(e)}"
+        
     execute_task_prompt = f"""
 Current Task Execution Context:
 Task: {task}
+Facts: {plan.facts}
 Plan: {plan.format()}
 Current Step Index: {step_index}
 Current Step Description: {plan.steps[step_index]}
+
+# Environment Information
+- Operating System: {platform.platform()}
+- WorkSpace: {os.getenv("WORKSPACE_PATH") or os.getcwd()}
+    Files in Workspace:
+    {files_list}
+- Encoding: UTF-8 (must be used for all file operations and python code read/write)
+- Language: Chinese
+- 网络代理：{os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")}
+
+Execute the current step:
 """
     return execute_task_prompt
+
+def update_facts_prompt(task,facts):
+    return f"""As a reminder, we are working to solve the following task:
+
+{task}
+
+We have executed several actions and learned new information in the process. Please rewrite the following fact sheet, updating it to include what we've learned that may be helpful. Example edits can include (but are not limited to) adding new findings based on our actions, moving educated guesses to verified facts if appropriate, etc. Updates may be made to any section of the fact sheet, and more than one section of the fact sheet can be edited. This is an especially good time to update educated guesses based on our recent actions, so please at least add or update one educated guess or hunch, and explain your reasoning based on what we've learned.
+
+Here is the old fact sheet:
+
+{facts}"""

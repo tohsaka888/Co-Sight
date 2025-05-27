@@ -70,14 +70,14 @@ def update_plan_skill():
         'skill_type': "function",
         'display_name_zh': '更新计划',
         'display_name_en': 'Update Plan',
-        'description_zh': '更新现有的任务计划',
-        'description_en': 'Update an existing task plan',
+        'description_zh': '根据重规划规则更新现有的任务计划，保留已完成/进行中/阻塞的步骤，仅修改未开始的步骤',
+        'description_en': 'Update an existing task plan according to replanning rules, preserving completed/in_progress/blocked steps and only modifying not_started steps',
         'semantic_apis': ["api_planning"],
         'function': SkillFunction(
             id='7e8f9a2b-c6e3-4f8d-b1a2-3e4f5d6c7b8b',
             name='zagents_framework.app.manus.planner.plan_toolkit.PlanToolkit.update_plan',
-            description_zh='更新计划的标题、步骤或依赖关系',
-            description_en='Update the title, steps or dependencies of a plan',
+            description_zh='根据重规划规则更新计划的标题、步骤或依赖关系，处理阻塞步骤，并保持计划连续性',
+            description_en='Update the title, steps or dependencies of a plan according to replanning rules, handle blocked steps, and maintain plan continuity',
             parameters={
                 "type": "object",
                 "properties": {
@@ -91,8 +91,8 @@ def update_plan_skill():
                         'items': {
                             'type': 'string'
                         },
-                        'description_zh': '新的步骤列表',
-                        'description_en': 'New list of steps for the plan'
+                        'description_zh': '新的步骤列表，保留已完成/进行中/阻塞的步骤',
+                        'description_en': 'New list of steps for the plan, preserving completed/in_progress/blocked steps'
                     },
                     'dependencies': {
                         'type': 'object',
@@ -102,8 +102,8 @@ def update_plan_skill():
                                 'type': 'integer'
                             }
                         },
-                        'description_zh': '新的步骤依赖关系',
-                        'description_en': 'New dependencies between steps'
+                        'description_zh': '新的步骤依赖关系，保持计划连续性',
+                        'description_en': 'New dependencies between steps, maintaining plan continuity'
                     }
                 },
                 'required': []

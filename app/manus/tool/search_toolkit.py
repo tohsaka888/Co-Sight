@@ -3,6 +3,8 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Literal, Optional, TypeAlias, Union
 from functools import wraps
 import time
+
+from app.manus.gate.format_gate import format_check
 from app.manus.tool.google_api_key import apikeys
 import requests
 
@@ -39,6 +41,7 @@ class SearchToolkit:
     """
 
     @retry()
+    @format_check()
     def search_wiki(self, entity: str) -> str:
         r"""Search the entity in WikiPedia and return the summary of the
             required page, containing factual information about

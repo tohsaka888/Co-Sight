@@ -22,6 +22,9 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
+from app.manus.gate.format_gate import format_check
+
+
 class ScrapeWebsiteTool:
     name: str = "Read website content"
     description: str = "A tool that can be used to read a website content."
@@ -75,7 +78,7 @@ def is_document_url(url):
     path = urlparse(url).path.lower()
     return path.endswith('.pdf') or path.endswith('.doc') or path.endswith('.docx')
 
-
+@format_check()
 def fetch_website_content(website_url):
     if is_document_url(website_url):
         print(f'Please use the file download tool to get the contents of the file {website_url}')

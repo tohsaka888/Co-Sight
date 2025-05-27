@@ -16,14 +16,16 @@
 import asyncio
 import inspect
 import json
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any
 
 from app.agent_dispatcher.domain.plan.action.skill.mcp.engine import MCPEngine
+from app.agent_dispatcher.infrastructure.entity.AgentInstance import AgentInstance
 from app.manus.agent.base.skill_to_tool import convert_skill_to_tool
 from app.manus.llm.chat_llm import ChatLLM
-from app.agent_dispatcher.infrastructure.entity.AgentInstance import AgentInstance
 from app.manus.task.time_record_util import time_record
-from concurrent.futures import ThreadPoolExecutor
+from app.manus.task.todolist import Plan
 
 
 class BaseAgent:
@@ -46,13 +48,19 @@ class BaseAgent:
                     return tool, func.name
         return None
 
-    def execute(self, messages: List[Dict[str, Any]], step_index=None, max_iteration=10):
+    def execute(self, messages: List[Dict[str, Any]], step_index=None, plan: Plan = None, max_iteration=20):
         for i in range(max_iteration):
-            response = self.llm.create_with_tools(messages, self.tools)
+            # print(f"messages:{messages}")
+            try:
+                response = self.llm.create_with_tools(messages, self.tools)
+            except Exception as e:
+                print(f"execute error: {e}")
+                messages[-1]["content"]=f"{e},若要读取文件，使用python代码解析和正则匹配"
+                continue
             print(f"index: {i}, response:{response}")
 
             # Process initial response
-            result = self._process_response(response, messages, step_index)
+            result = self._process_response(response, messages, step_index, plan)
             if result:
                 return result
 
@@ -62,7 +70,7 @@ class BaseAgent:
             return self._handle_max_iteration(messages, step_index)
         return messages[-1].get("content")
 
-    def _process_response(self, response, messages, step_index):
+    def _process_response(self, response, messages, step_index, plan: Plan = None, ):
         if not response.tool_calls:
             messages.append({"role": "assistant", "content": response.content})
             return response.content
@@ -73,7 +81,7 @@ class BaseAgent:
             "tool_calls": response.tool_calls
         })
 
-        results = self._execute_tool_calls(response.tool_calls, step_index)
+        results = self._execute_tool_calls(response.tool_calls, step_index, plan)
         messages.extend(results)
 
         # Check for termination conditions
@@ -82,7 +90,7 @@ class BaseAgent:
                 return result["content"]
         return None
 
-    def _execute_tool_calls(self, tool_calls, step_index):
+    def _execute_tool_calls(self, tool_calls, step_index, plan: Plan = None, ):
         results = []
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -96,19 +104,44 @@ class BaseAgent:
                         function_name=function_name,
                         function_args=function_args,
                         tool_call_id=tool_call.id,
-                        step_index=step_index
+                        step_index=step_index,
+                        plan=plan
                     ))
                 else:
                     futures.append(executor.submit(
                         self._execute_mcp_tool_call,
                         function_name=function_name,
                         function_args=function_args,
-                        tool_call_id = tool_call.id
+                        tool_call_id=tool_call.id,
+                        plan=plan
                     ))
 
             for future in futures:
                 try:
-                    results.append(future.result())
+                    result = future.result()
+                    # 创建新的结果字典，排除function_args
+                    result_for_append = {
+                        "role": result["role"],
+                        "name": result["name"],
+                        "content": result["content"],
+                        "tool_call_id": result["tool_call_id"]
+                    }
+                    results.append(result_for_append)
+                    
+                    # Record tool execution in plan if available
+                    try:
+                        if step_index is not None and plan:
+                            # 解析工具参数
+                            args_dict = json.loads(result.get('function_args', '{}'))
+                            plan.record_tool_execution(
+                                step_index=step_index,
+                                tool_name=result['name'],
+                                tool_args=args_dict,
+                                result=result['content']
+                            )
+                    except Exception as e:
+                        print(f"Error recording tool execution: {e},{traceback.format_exc()}")
+
                 except Exception as e:
                     results.append({
                         "role": "tool",
@@ -131,7 +164,7 @@ class BaseAgent:
         return messages[-1].get("content")
 
     @time_record
-    def _execute_tool_call(self, function_name="", function_args="", tool_call_id="", step_index=None):
+    def _execute_tool_call(self, function_name="", function_args="", tool_call_id="", step_index=None, plan: Plan = None):
         try:
             # Clean and validate JSON
             cleaned_args = function_args.replace('\\\'', '\'')
@@ -160,7 +193,8 @@ class BaseAgent:
                 "role": "tool",
                 "name": function_name,
                 "content": str(result),
-                "tool_call_id": tool_call_id
+                "tool_call_id": tool_call_id,
+                "function_args": function_args
             }
         except Exception as e:
             return {
@@ -171,7 +205,7 @@ class BaseAgent:
             }
 
     @time_record
-    def _execute_mcp_tool_call(self, function_name="", function_args="", tool_call_id=""):
+    def _execute_mcp_tool_call(self, function_name="", function_args="", tool_call_id="", plan: Plan = None):
         try:
             mcp_tool, tool_name = self.find_mcp_tool(function_name)
             if mcp_tool and tool_name:
@@ -184,7 +218,8 @@ class BaseAgent:
                     "role": "tool",
                     "name": function_name,
                     "content": str(result),
-                    "tool_call_id": tool_call_id
+                    "tool_call_id": tool_call_id,
+                    "function_args": function_args
                 }
             else:
                 return {

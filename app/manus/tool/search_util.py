@@ -21,6 +21,9 @@ import random
 import asyncio
 import aiohttp
 
+from app.manus.gate.format_gate import format_check
+
+
 async def fetch_url_content(url: str) -> str:
     """Fetch and parse content from a given URL"""
     try:
@@ -67,7 +70,7 @@ async def fetch_url_content(url: str) -> str:
         return "Request timed out"
     except Exception as e:
         return f"Error fetching content: {str(e)}"
-
+@format_check()
 def search_baidu(
         query: str
     ) -> List[Dict[str, Any]]:

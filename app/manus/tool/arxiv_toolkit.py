@@ -31,6 +31,9 @@ from typing import Dict, Generator, List, Optional
 from arxiv2text import arxiv_to_text
 import os
 
+from app.manus.gate.format_gate import format_check
+
+
 class ArxivToolkit:
     r"""A toolkit for interacting with the arXiv API to search and download
     academic papers.
@@ -74,6 +77,7 @@ class ArxivToolkit:
         )
         return self.client.results(search_query)
 
+    @format_check()
     def search_papers(
             self,
             query: str,
@@ -123,12 +127,12 @@ class ArxivToolkit:
                 paper_info['paper_text'] = text[:2000]
 
                 papers_data.append(paper_info)
-            print(f"papers_data:{papers_data}")
             return papers_data
         finally:
             os.environ['HTTP_PROXY'] = "http://proxyhk.zte.com.cn:80"
             os.environ['HTTPS_PROXY'] = "http://proxyhk.zte.com.cn:80"
 
+    @format_check()
     def download_papers(
             self,
             query: str,

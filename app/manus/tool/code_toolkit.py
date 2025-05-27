@@ -19,6 +19,8 @@ import shlex
 import sys
 from functools import partial
 from typing import List, Literal, Optional, Union
+
+from app.manus.gate.format_gate import format_check
 from app.manus.tool.interpreters.internal_python_interpreter import InternalPythonInterpreter
 from app.manus.tool.interpreters.subprocess_interpreter import SubprocessInterpreter
 import threading
@@ -76,6 +78,7 @@ class CodeToolkit:
             if callable(attr_value) and not attr_name.startswith("__"):
                 setattr(cls, attr_name, with_timeout(attr_value))
 
+    @format_check()
     def execute_code(self, code: str) -> str:
         r"""Execute a given code snippet.
 

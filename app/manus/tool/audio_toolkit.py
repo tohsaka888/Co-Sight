@@ -15,6 +15,8 @@
 
 from dotenv import load_dotenv
 
+from ..gate.format_gate import format_check
+
 load_dotenv()
 import os
 from openai import OpenAI
@@ -126,6 +128,7 @@ class AudioTool:
         print(f'audio_recognition inifo {full_response}')
         return full_response
 
+    @format_check()
     def speech_to_text(self, audio_path: str, task_prompt: str, ):
         print(f"Using Tool: {self.name}")
         return asyncio.run(self.audio_recognition(audio_path, task_prompt))

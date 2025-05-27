@@ -12,6 +12,8 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+from app.manus.gate.format_gate import format_check
+
 
 class TerminateToolkit:
     r"""A class representing a toolkit for terminating interactions when the request is met OR if the assistant cannot proceed further with the task."""
@@ -19,6 +21,7 @@ class TerminateToolkit:
     def __init__(self):
         pass
 
+    @format_check()
     def terminate(self, status: str, reason: str) -> str:
         r"""Finish the current execution.
 

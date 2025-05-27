@@ -72,6 +72,7 @@ class Manus:
     def execute(self, question, output_format=""):
         create_task = question
         retry_count = 0
+        self.task_planner_agent.create_fact(question)
         while not self.plan.get_ready_steps() and retry_count < 3:
             create_result = self.task_planner_agent.create_plan(create_task, output_format)
             create_task += f"\nThe plan creation result is: {create_result}\nCreation failed, please carefully review the plan creation rules and select the create_plan tool to create the plan"

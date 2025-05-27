@@ -16,6 +16,7 @@
 import ast
 from typing import List, Optional, Dict
 
+from app.manus.gate.format_gate import format_check
 from app.manus.task.plan_report_manager import plan_report_event_manager
 from app.manus.task.todolist import Plan
 
@@ -26,6 +27,7 @@ class PlanToolkit:
     def __init__(self, plan: Optional[Plan] = None):
         self.plan = plan
 
+    @format_check()
     def create_plan(self, title: str, steps: List[str], dependencies: Optional[Dict[int, List[int]]] = None) -> str:
         r"""Create a new plan with the given title, steps, and dependencies.
 
@@ -57,6 +59,7 @@ class PlanToolkit:
         print(result)
         return result
 
+    @format_check()
     def update_plan(self, title: Optional[str] = None, steps: Optional[List[str]] = None,
                     dependencies: Optional[Dict[int, List[int]]] = None) -> str:
         r"""Update the existing plan with new title, steps, or dependencies while preserving completed steps.
@@ -84,5 +87,4 @@ class PlanToolkit:
         self.plan.update(title, steps, dependencies)
         result = f"Plan updated successfully\n\n{self.plan.format()}"
         plan_report_event_manager.publish("plan_updated", self.plan)
-        print(f"update result is {result}")
         return result

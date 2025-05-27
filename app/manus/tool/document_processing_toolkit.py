@@ -13,20 +13,26 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-# -*- coding: utf-8 -*-
-from docx2markdown._docx_to_markdown import docx_to_markdown
-import requests
-import mimetypes
 import json
-from retry import retry
-from typing import List, Optional, Tuple
-from urllib.parse import urlparse
+import mimetypes
 import os
 import subprocess
-import xmltodict
+from typing import List, Optional, Tuple
+from urllib.parse import urlparse
+
 import nest_asyncio
+import requests
+import xmltodict
+# -*- coding: utf-8 -*-
+from docx2markdown._docx_to_markdown import docx_to_markdown
+from openai import OpenAI
+from retry import retry
+
+from app.manus.gate.format_gate import format_check
 from app.manus.tool.excel_toolkit import extract_excel_content
-from .pptx_toolkit import extract_pptx_content
+from app.manus.tool.pptx_toolkit import extract_pptx_content
+from config.config import get_plan_model_config, get_model_config
+
 nest_asyncio.apply()
 
 
@@ -36,12 +42,87 @@ class DocumentProcessingToolkit:
     This class provides method for processing docx, pdf, pptx, etc. It cannot process excel files.
     """
 
-    def __init__(self, cache_dir: Optional[str] = None):
+    def __init__(self, llm_config, cache_dir: Optional[str] = None):
+        self.llm_config = llm_config
         self.cache_dir = "tmp/"
         if cache_dir:
             self.cache_dir = cache_dir
 
+    _client: OpenAI = None
+    @property
+    def client(self) -> OpenAI:
+        llm_config = {"api_key": self.llm_config['api_key'],
+                      "base_url": self.llm_config['base_url']
+                      }
+        """Cached ChatOpenAI client instance."""
+        if self._client is None:
+            self._client = OpenAI(**llm_config)
+        return self._client
+
+    def ask_question_about_document(self, document_path: str, task_prompt: str) -> str:
+        r"""Extract content from a document and use it as context to answer a task prompt using LLM.
+
+        Args:
+            document_path (str): Path to the document to extract content from
+            task_prompt (str): The task/question to ask about the document content
+
+        Returns:
+            str: The LLM's response to the task prompt based on the document content
+        """
+        # First extract the document content
+        print("ok")
+        document_content = self.extract_document_content(document_path)
+        # print(f"document_content:{document_content}")
+
+        # Split content into chunks of 20,000 characters
+        chunk_size = 20000
+        content_chunks = [document_content[i:i + chunk_size]
+                          for i in range(0, len(document_content), chunk_size)]
+
+        full_response = ""
+
+        # Process each chunk sequentially
+        for chunk in content_chunks:
+            # Prepare the LLM request for this chunk
+            completion = self.client.chat.completions.create(
+                extra_headers={'Content-Type': 'application/json',
+                               'Authorization': 'Bearer %s' % self.llm_config['api_key']},
+                model=self.llm_config['model'],
+                messages=[
+                    {
+                        "role": "system",
+                        "content": [
+                            {"type": "text",
+                             "text": "You are a helpful AI assistant. Please provide detailed and complete answers to user questions based on the provided document content."},
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"Document Content (Partial):\n{chunk}"},
+                            {"type": "text", "text": task_prompt},
+                        ],
+                    },
+                ],
+                temperature=self.llm_config['temperature'],
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+
+            # Process the streaming response for this chunk
+            for response_chunk in completion:
+                if response_chunk.choices:
+                    delta = response_chunk.choices[0].delta
+                    if hasattr(delta, "content") and delta.content:
+                        try:
+                            full_response += delta.content
+                        except Exception as ex:
+                            pass
+
+        return full_response
+
     @retry((requests.RequestException))
+    @format_check()
     def extract_document_content(self, document_path: str) -> Tuple[bool, str]:
         r"""Extract the content of a given document (or url) and return the processed text.
         It may filter out some information, resulting in inaccurate content.
@@ -216,3 +297,12 @@ class DocumentProcessingToolkit:
                 extracted_files.append(os.path.join(root, file))
 
         return extracted_files
+
+
+llm_config = get_model_config()
+print("here")
+tool=DocumentProcessingToolkit(llm_config=llm_config, cache_dir=None)
+print("here")
+
+result=tool.ask_question_about_document(r"F:\project\agent\Co-Sight\workspace\20250527_142235\114d5fd0-e2ae-4b6d-a65a-870da2d19c08\book.pdf","In the endnote found in the second-to-last paragraph of page 11 of the book with the doi 10.2307/j.ctv9b2xdv, what date in November was the Wikipedia article accessed? Just give the day of the month.")
+print(result)
