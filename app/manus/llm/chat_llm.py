@@ -21,7 +21,7 @@ from app.manus.task.time_record_util import time_record
 
 class ChatLLM:
     def __init__(self, base_url: str, api_key: str, model: str, client: OpenAI, max_tokens: int = 4096,
-                 temperature: float = 0.0, stream: bool = False,  tools: List[Any] = None):
+                 temperature: float = 0.0, stream: bool = False, tools: List[Any] = None):
         self.tools = tools or []
         self.client = client
         self.base_url = base_url
@@ -51,17 +51,32 @@ class ChatLLM:
         """
         Create a chat completion with support for function/tool calls
         """
+        import time
+        import json
         # 清洗提示词，去除None
         messages = ChatLLM.clean_none_values(messages)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
-        # print(f"response is {response}")
+        max_retries = 2
+        for attempt in range(max_retries):
+            model_name = self.model
+            try:
+                if attempt == 1:
+                    model_name = 'anthropic/claude-3.7-sonnet'
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=self.temperature
+                )
+                print(f"LLM with tools chat completions response is {response}")
+                break
+            except Exception as e:
+                print(f"JSON decode error: {e} on attempt {attempt + 1}, retrying...")
+                if attempt == max_retries:
+                    print(f"Failed to create after {max_retries + 1} attempts.")
+                    raise
+                time.sleep(3)  # 增加等待时间，避免频繁重试
+
         # 去除think标签
         content = response.choices[0].message.content
         if content is not None and '</think>' in content:
@@ -72,13 +87,30 @@ class ChatLLM:
     @time_record
     def chat_to_llm(self, messages: List[Dict[str, Any]]):
         # 清洗提示词，去除None
-        messages = ChatLLM.clean_none_values(messages)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
+        import time
+        import json
+        # 清洗提示词，去除None
+        max_retries = 2
+        for attempt in range(max_retries):
+            model_name = self.model
+            try:
+                if attempt == 1:
+                    model_name = 'anthropic/claude-3.7-sonnet'
+                messages = ChatLLM.clean_none_values(messages)
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+                print(f"LLM with tools chat completions response is {response}")
+                break
+            except Exception as e:
+                print(f"JSON decode error: {e} on attempt {attempt + 1}, retrying...")
+                if attempt == max_retries:
+                    print(f"Failed to create after {max_retries + 1} attempts.")
+                    raise
+                time.sleep(3)  # 增加等待时间，避免频繁重试
         # print(f"response is {response}")
         # 去除think标签
         content = response.choices[0].message.content

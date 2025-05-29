@@ -15,17 +15,17 @@
 
 from dotenv import load_dotenv
 
-from ..gate.format_gate import format_check
+from app.manus.gate.format_gate import format_check
 
-load_dotenv()
 import os
 from openai import OpenAI
 import base64
 import numpy as np
 import soundfile as sf
 import asyncio
-from .file_download_toolkit import *
+from app.manus.tool.file_download_toolkit import *
 
+from llm import llm_for_plan, llm_for_act, llm_for_tool, llm_for_vision
 
 class VideoTool:
     def __init__(self, llm_config):
@@ -96,8 +96,7 @@ class VideoTool:
                 },
             ],
             # 设置输出数据的模态，当前支持两种：["text","audio"]、["text"]
-            modalities=["text", "audio"],
-            audio={"voice": "Cherry", "format": "wav"},
+            modalities=["text"],
             # stream 必须设置为 True，否则会报错
             stream=True,
             stream_options={"include_usage": True},

@@ -27,12 +27,12 @@ from app.manus.task.time_record_util import time_record
 from app.manus.tool.act_toolkit import ActToolkit
 from app.manus.tool.arxiv_toolkit import ArxivToolkit
 from app.manus.tool.audio_toolkit import AudioTool
-from app.manus.tool.browser_simulation import brower_use_cal
+# from app.manus.tool.browser_simulation import brower_use_cal
 from app.manus.tool.code_toolkit import CodeToolkit
 from app.manus.tool.document_processing_toolkit import DocumentProcessingToolkit
 from app.manus.tool.file_download_toolkit import download_file
 from app.manus.tool.file_toolkit import FileToolkit
-from app.manus.tool.google_search_util import search_google
+# from app.manus.tool.google_search_util import search_google
 from app.manus.tool.image_analysis_toolkit import VisionTool
 from app.manus.tool.scrape_website_toolkit import fetch_website_content
 from app.manus.tool.search_toolkit import SearchToolkit
@@ -43,21 +43,19 @@ from app.manus.tool.video_analysis_toolkit import VideoTool
 class TaskActorAgent(BaseAgent):
     def __init__(self, agent_instance: AgentInstance, llm: ChatLLM,
                  vision_llm: ChatLLM,
-                 tool_llm: ChatLLM, plan_id,
+                 tool_llm: ChatLLM,
+                 image_llm: ChatLLM,
+                 plan_id,
                  functions: Dict = None):
         self.plan = TaskManager.get_plan(plan_id)
         act_toolkit = ActToolkit(self.plan)
         terminate_toolkit = TerminateToolkit()
         file_toolkit = FileToolkit()
 
-        image_toolkit = VisionTool({"base_url": tool_llm.base_url,
-                                    "model": tool_llm.model,
-                                    "temperature": tool_llm.temperature,
-                                    "api_key": tool_llm.api_key})
-        # image_toolkit = VisionTool({"base_url": vision_llm.base_url,
-        #                             "model": vision_llm.model,
-        #                             "temperature": vision_llm.temperature,
-        #                             "api_key": vision_llm.api_key})
+        image_toolkit = VisionTool({"base_url": image_llm.base_url,
+                                    "model": image_llm.model,
+                                    "temperature": image_llm.temperature,
+                                    "api_key": image_llm.api_key})
         audio_toolkit = AudioTool({"base_url": vision_llm.base_url,
                                    "model": vision_llm.model,
                                    "temperature": vision_llm.temperature,
@@ -67,9 +65,9 @@ class TaskActorAgent(BaseAgent):
                                    "temperature": vision_llm.temperature,
                                    "api_key": vision_llm.api_key})
         doc_toolkit = DocumentProcessingToolkit({"base_url": tool_llm.base_url,
-                                    "model": tool_llm.model,
-                                    "temperature": tool_llm.temperature,
-                                    "api_key": tool_llm.api_key})
+                                                 "model": tool_llm.model,
+                                                 "temperature": tool_llm.temperature,
+                                                 "api_key": tool_llm.api_key})
         search_toolkit = SearchToolkit()
         arxiv_toolkit = ArxivToolkit()
         code_toolkit = CodeToolkit(sandbox="subprocess")
