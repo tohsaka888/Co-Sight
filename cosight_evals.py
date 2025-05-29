@@ -101,11 +101,11 @@ if __name__ == '__main__':
     os.environ['RESULTS_PATH'] = WORKSPACE_PATH.as_posix()
 
     manus = manus()
-    # results = gaia(process_message=manus, task_id=[
+    # results = gaia(process_message=manus, split='test', task_id=[
     #     "46719c30-f4c3-4cad-be07-d5cb21eee6bb",
     # ],
     #                postcall=save_results
     #                )
-    results = gaia_level1(process_message=manus, postcall=save_results)
+    results = gaia_level1(process_message=manus, split='test', postcall=save_results)
     datestr = datetime.datetime.today().strftime('%Y%m%d%H%M%S')
     save_results(results, (WORKSPACE_PATH / f'result_{datestr}.json').as_posix())
