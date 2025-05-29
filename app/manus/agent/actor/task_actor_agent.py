@@ -44,7 +44,6 @@ class TaskActorAgent(BaseAgent):
     def __init__(self, agent_instance: AgentInstance, llm: ChatLLM,
                  vision_llm: ChatLLM,
                  tool_llm: ChatLLM,
-                 image_llm: ChatLLM,
                  plan_id,
                  functions: Dict = None):
         self.plan = TaskManager.get_plan(plan_id)
@@ -52,10 +51,10 @@ class TaskActorAgent(BaseAgent):
         terminate_toolkit = TerminateToolkit()
         file_toolkit = FileToolkit()
 
-        image_toolkit = VisionTool({"base_url": image_llm.base_url,
-                                    "model": image_llm.model,
-                                    "temperature": image_llm.temperature,
-                                    "api_key": image_llm.api_key})
+        image_toolkit = VisionTool({"base_url": vision_llm.base_url,
+                                    "model": vision_llm.model,
+                                    "temperature": vision_llm.temperature,
+                                    "api_key": vision_llm.api_key})
         audio_toolkit = AudioTool({"base_url": vision_llm.base_url,
                                    "model": vision_llm.model,
                                    "temperature": vision_llm.temperature,
