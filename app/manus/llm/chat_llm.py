@@ -55,6 +55,7 @@ class ChatLLM:
         import json
         # 清洗提示词，去除None
         messages = ChatLLM.clean_none_values(messages)
+        print(f'create_with_tools messages:{messages}')
         max_retries = 2
         for attempt in range(max_retries):
             model_name = self.model
@@ -68,7 +69,7 @@ class ChatLLM:
                     tool_choice="auto",
                     temperature=self.temperature
                 )
-                print(f"LLM with tools chat completions response is {response}")
+                print(f"LLM with tools chat completions response{attempt + 1} is {response}")
                 break
             except Exception as e:
                 print(f"JSON decode error: {e} on attempt {attempt + 1}, retrying...")
@@ -90,20 +91,22 @@ class ChatLLM:
         import time
         import json
         # 清洗提示词，去除None
+        messages = ChatLLM.clean_none_values(messages)
+        print(f'chat_to_llm messages:{messages}')
         max_retries = 2
         for attempt in range(max_retries):
             model_name = self.model
             try:
                 if attempt == 1:
                     model_name = 'anthropic/claude-3.7-sonnet'
-                messages = ChatLLM.clean_none_values(messages)
+
                 response = self.client.chat.completions.create(
                     model=model_name,
                     messages=messages,
                     temperature=self.temperature,
                     max_tokens=self.max_tokens
                 )
-                print(f"LLM with tools chat completions response is {response}")
+                print(f"LLM with tools chat completions response{attempt + 1} is {response}")
                 break
             except Exception as e:
                 print(f"JSON decode error: {e} on attempt {attempt + 1}, retrying...")

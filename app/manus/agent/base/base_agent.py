@@ -18,6 +18,7 @@ import inspect
 import json
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from json import JSONDecodeError
 from typing import List, Dict, Any
 
 from app.agent_dispatcher.domain.plan.action.skill.mcp.engine import MCPEngine
@@ -54,7 +55,7 @@ class BaseAgent:
             try:
                 response = self.llm.create_with_tools(messages, self.tools)
             except Exception as e:
-                print(f"execute error: {e}")
+                print(f"iter {i} execute error: {e}")
                 messages[-1]["content"]=f"{e},若要读取文件，使用python代码解析和正则匹配"
                 continue
             print(f"index: {i}, response:{response}")
@@ -132,13 +133,17 @@ class BaseAgent:
                     try:
                         if step_index is not None and plan:
                             # 解析工具参数
-                            args_dict = json.loads(result.get('function_args', '{}'))
+                            json_function_args = result.get('function_args')
+                            json_str = json_function_args if json_function_args else '{}'
+                            args_dict = json.loads(json_str)
                             plan.record_tool_execution(
                                 step_index=step_index,
                                 tool_name=result['name'],
                                 tool_args=args_dict,
                                 result=result['content']
                             )
+                    except JSONDecodeError as e:
+                        print(f"Error recording tool execution: {e}, function_args={json_function_args}  {traceback.format_exc()}")
                     except Exception as e:
                         print(f"Error recording tool execution: {e},{traceback.format_exc()}")
 
