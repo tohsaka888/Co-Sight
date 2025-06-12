@@ -38,6 +38,7 @@ from app.manus.tool.scrape_website_toolkit import fetch_website_content
 from app.manus.tool.search_toolkit import SearchToolkit
 from app.manus.tool.terminate_toolkit import TerminateToolkit
 from app.manus.tool.video_analysis_toolkit import VideoTool
+from app.manus.tool.web_util import sync_browser_use
 
 
 class TaskActorAgent(BaseAgent):
@@ -74,7 +75,7 @@ class TaskActorAgent(BaseAgent):
             "execute_code": code_toolkit.execute_code,
             "search_google": search_toolkit.search_google,
             "search_wiki": search_toolkit.search_wiki,
-            "browser_use": brower_use_cal,
+            "browser_use": sync_browser_use,
             "mark_step": act_toolkit.mark_step,
             "file_saver": file_toolkit.write_to_file,
             "file_read": file_toolkit.file_read,

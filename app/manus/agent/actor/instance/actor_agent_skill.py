@@ -181,7 +181,7 @@ def browser_use_skill():
         'semantic_apis': ["api_browser_simulation"],
         'function': SkillFunction(
             id='2c44f9ad-be5c-4e6c-a9d8-1426b23828a1',
-            name='zagents_framework.app.manus.browser_toolkit.browser_use',
+            name='app.cosight.browser_toolkit.browser_use',
             description_zh='通过模拟浏览器交互解决复杂任务',
             description_en='Solve complex tasks by simulating browser interactions',
             parameters={
@@ -191,14 +191,9 @@ def browser_use_skill():
                         "type": "string",
                         "description_zh": "需要解决的任务描述",
                         "description_en": "Task description to be solved"
-                    },
-                    "start_url": {
-                        "type": "string",
-                        "description_zh": "要访问的起始 URL",
-                        "description_en": "The start URL to visit"
                     }
                 },
-                "required": ["task_prompt", "start_url"]
+                "required": ["task_prompt"]
             }
         )
     }

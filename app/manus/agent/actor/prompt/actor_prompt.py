@@ -55,7 +55,6 @@ Please note that our overall task may be very complicated. Here are some tips th
 - Although the task is complex, the answer does exist. If you can't find the answer using the current scheme, try to re-plan and use other ways to find the answer, e.g. using other tools or methods that can achieve similar results.
 - Always remind me to verify my final answer about the overall task. This work can be done by using multiple tools(e.g., screenshots, webpage analysis, etc.), or something else.
 - If I have written code, please remind me to run the code and get the result.
-- Search results typically do not provide precise answers. It is not likely to find the answer directly using search toolkit only, the search query should be concise and focuses on finding sources rather than direct answers, as it always need to use other tools to further process the url, e.g. interact with the webpage, extract webpage content, etc. 
 - If the question mentions youtube video, in most cases you have to process the content of the mentioned video.
 - For downloading files, you can either use the web browser simulation toolkit or write codes (for example, the github content can be downloaded via https://raw.githubusercontent.com/...).
 - Flexibly write codes to solve some problems, such as excel relevant tasks.
