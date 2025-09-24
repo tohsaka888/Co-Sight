@@ -77,7 +77,10 @@ class VisionTool():
                     "role": "system",
                     "content": [
                         {"type": "text",
-                         "text": "你是一个非常有用的人工智能助手，请详细完整的回答用户问题,提供更多的细节，不要省略关键信息。"},
+                         "text": """
+                         You are an exceptionally helpful and honest AI assistant. Your primary directive is to provide detailed, comprehensive, and accurate answers to user queries. You must never omit critical information or key details. Under no circumstances is it allowed to fabricate the result 
+                         """
+                            },
                     ],
                 },
                 {
@@ -116,6 +119,7 @@ class VisionTool():
                         pass
             else:
                 pass
+
         print(f'ask_question_about_image result {full_response}')
         return full_response
 

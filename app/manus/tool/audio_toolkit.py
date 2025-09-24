@@ -128,6 +128,7 @@ class AudioTool:
         print(f'audio_recognition inifo {full_response}')
         return full_response
 
+
     @format_check()
     def speech_to_text(self, audio_path: str, task_prompt: str, ):
         print(f"Using Tool: {self.name}")

@@ -61,7 +61,7 @@ class ChatLLM:
             model_name = self.model
             try:
                 if attempt == 1:
-                    model_name = 'anthropic/claude-3.7-sonnet'
+                    model_name = 'anthropic/claude-sonnet-4'
                 response = self.client.chat.completions.create(
                     model=model_name,
                     messages=messages,
@@ -98,8 +98,7 @@ class ChatLLM:
             model_name = self.model
             try:
                 if attempt == 1:
-                    model_name = 'anthropic/claude-3.7-sonnet'
-
+                    model_name = 'anthropic/claude-sonnet-4'
                 response = self.client.chat.completions.create(
                     model=model_name,
                     messages=messages,

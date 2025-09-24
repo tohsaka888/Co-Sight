@@ -18,7 +18,8 @@ import re
 import traceback
 from pathlib import Path
 
-from backports.tarfile import DEFAULT_FORMAT
+# from backports.tarfile import DEFAULT_FORMAT
+from tarfile import DEFAULT_FORMAT
 
 from app.manus.gate.format_gate import format_check
 

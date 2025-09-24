@@ -52,10 +52,20 @@ def create_actor_template(template_name):
         'default_replay_en': 'Task Execution Expert',
         "icon": "",
         'skills': [
-            execute_code_skill(),
-            search_google_skill(),
+            # download_wiki_main_image_skill(),
+            # download_youtube_channel_thumbnails_skill(),
+            
+            # download_wiki_commons_image_skill(),
+            # get_wikipedia_revision_record_skill(),
+
+            search_wiki_history_url_skill(),
             search_wiki_skill(),
+            search_google_skill(),
             # browser_use_skill(),
+
+            # count_youtube_videos_number_skill(),
+
+            execute_code_skill(),
             mark_step_skill(),
             file_saver_skill(),
             file_read_skill(),
@@ -64,7 +74,9 @@ def create_actor_template(template_name):
             ask_question_about_video_skill(),
             ask_question_about_image_skill(),
             # extract_document_content_skill(),
+
             ask_question_by_extract_document_content_skill(),
+
             fetch_website_content_skill(),
             search_arxiv_papers_skill(),
             download_arxiv_papers_skill(),

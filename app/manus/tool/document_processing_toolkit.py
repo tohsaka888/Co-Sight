@@ -95,7 +95,7 @@ class DocumentProcessingToolkit:
                         "role": "system",
                         "content": [
                             {"type": "text",
-                             "text": "You are a helpful AI assistant. Please provide detailed and complete answers to user questions based on the provided document content."},
+                             "text": "You are a helpful and honest AI assistant. Please provide detailed and complete answers to user questions based on the provided document content."},
                         ],
                     },
                     {

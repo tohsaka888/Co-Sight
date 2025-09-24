@@ -49,11 +49,12 @@ class BaseAgent:
                     return tool, func.name
         return None
 
-    def execute(self, messages: List[Dict[str, Any]], step_index=None, plan: Plan = None, max_iteration=20):
+    def execute(self, messages: List[Dict[str, Any]], step_index=None, plan: Plan = None, max_iteration=10):
         for i in range(max_iteration):
             # print(f"messages:{messages}")
             try:
                 response = self.llm.create_with_tools(messages, self.tools)
+
             except Exception as e:
                 print(f"iter {i} execute error: {e}")
                 messages[-1]["content"]=f"{e},若要读取文件，使用python代码解析和正则匹配"

@@ -17,6 +17,7 @@
 import uuid
 from urllib.parse import urlparse
 import os
+import fitz
 import requests
 from tqdm import tqdm
 import subprocess
@@ -54,6 +55,70 @@ def download_file(url, dest_path):
 
     print(f"\n✅ 下载完成: {dest_path}")
     return f"\n✅ 下载完成: {dest_path}"
+
+
+def convert_pdf_page_to_png(pdf_path: str, page_number: str) -> str:
+    """
+    将 PDF 文件中的指定页转换为 PNG 图片。
+
+    Args:
+        pdf_path (str): 输入的 PDF 文件路径。
+        page_number (str): 需要转换的页码 (从 1 开始)。
+
+    Returns:
+        str: 描述转换结果的字符串，包含了输出文件的路径。
+             如果发生错误，则返回错误信息。
+    """
+    output_dir = pdf_path
+    # --- 输入验证 ---
+    if not os.path.exists(pdf_path):
+        return f"错误：PDF 文件不存在 -> {pdf_path}"
+
+    if not os.path.isdir(output_dir):
+        try:
+            os.makedirs(output_dir)
+        except OSError as e:
+            return f"错误：无法创建输出目录 -> {output_dir} | {e}"
+
+    try:
+        # 打开 PDF 文件
+        doc = fitz.open(pdf_path)
+    except Exception as e:
+        return f"错误：无法打开或解析 PDF 文件 -> {pdf_path} | {e}"
+
+    # --- 页码检查 ---
+    if page_number <= 0 or page_number > doc.page_count:
+        return f"错误：无效的页码。该 PDF 共有 {doc.page_count} 页，您指定的页码是 {page_number}。"
+
+    # --- 核心转换逻辑 ---
+    try:
+        # PyMuPDF 的页码是从 0 开始的，所以需要减 1
+        page = doc.load_page(page_number - 1)
+
+        # 设置渲染的清晰度 (DPI)，值越高图片越清晰，文件也越大
+        zoom = 2.0  # 缩放因子，2.0 对应 144 DPI (72 * 2)
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+
+        # 构建输出文件名
+        base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        output_filename = f"{base_name}_page_{page_number}.png"
+        output_path = os.path.join(output_dir, output_filename)
+
+        # 保存为 PNG
+        pix.save(output_path)
+
+        return f"成功：已将 '{os.path.basename(pdf_path)}' 的第 {page_number} 页转换为 PNG 文件，并保存至 -> {output_path}"
+
+    except Exception as e:
+        return f"错误：在转换过程中发生未知错误 | {e}"
+
+    finally:
+        # 确保 PDF 文件被关闭
+        if 'doc' in locals() and doc:
+            doc.close()
+
+
 
 
 def get_filename_from_url(url):

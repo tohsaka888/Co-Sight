@@ -39,6 +39,7 @@ from app.manus.tool.search_toolkit import SearchToolkit
 from app.manus.tool.terminate_toolkit import TerminateToolkit
 from app.manus.tool.video_analysis_toolkit import VideoTool
 from app.manus.tool.web_util import sync_browser_use
+from app.manus.tool.excel_toolkit import read_excel_color
 
 
 class TaskActorAgent(BaseAgent):
@@ -68,17 +69,28 @@ class TaskActorAgent(BaseAgent):
                                                  "model": tool_llm.model,
                                                  "temperature": tool_llm.temperature,
                                                  "api_key": tool_llm.api_key})
-        search_toolkit = SearchToolkit()
+        # search_toolkit = SearchToolkit()
+        search_toolkit = SearchToolkit({"base_url": tool_llm.base_url,
+                                                 "model": tool_llm.model,
+                                                 "temperature": tool_llm.temperature,
+                                                 "api_key": tool_llm.api_key})
         arxiv_toolkit = ArxivToolkit()
         code_toolkit = CodeToolkit(sandbox="subprocess")
         all_functions = {
-            "execute_code": code_toolkit.execute_code,
-            "search_google": search_toolkit.search_google,
+            # "read_excel_color": read_excel_color,
+            # "download_wiki_main_image": search_toolkit.download_wiki_main_image,
+            # "download_wiki_commons_image": search_toolkit.download_wiki_commons_image,
+            # "get_wikipedia_revision_record": search_toolkit.get_wikipedia_revision_record,
+
+            "search_wiki_history_url": search_toolkit.search_wiki_history_url,
             "search_wiki": search_toolkit.search_wiki,
-            "browser_use": sync_browser_use,
+            "search_google": search_toolkit.search_google,
+            # "browser_use": sync_browser_use,
+
             "mark_step": act_toolkit.mark_step,
             "file_saver": file_toolkit.write_to_file,
             "file_read": file_toolkit.file_read,
+            "execute_code": code_toolkit.execute_code,
             "file_str_replace": file_toolkit.file_str_replace,
             "file_find_in_content": file_toolkit.file_find_in_content,
             "audio_recognition": audio_toolkit.speech_to_text,
@@ -87,6 +99,7 @@ class TaskActorAgent(BaseAgent):
             "fetch_website_content": fetch_website_content,
             # "extract_document_content": doc_toolkit.extract_document_content,
             "ask_question_by_extract_document_content": doc_toolkit.ask_question_about_document,
+
             "search_papers": arxiv_toolkit.search_papers,
             "download_papers": arxiv_toolkit.download_papers,
             "download_file": download_file,
@@ -108,6 +121,8 @@ class TaskActorAgent(BaseAgent):
             if self.plan.step_statuses.get(self.plan.steps[step_index], "") == "in_progress":
                 self.plan.mark_step(step_index, step_status="completed", step_notes=str(result))
             self.update_fact(question)
+            pass
+
             return result
         except Exception as e:
             self.plan.mark_step(step_index, step_status="blocked", step_notes=str(e))
@@ -119,6 +134,7 @@ class TaskActorAgent(BaseAgent):
         result = self.llm.chat_to_llm(self.history)
         self.history.append({"role": "assistant", "content": result})
         self.plan.update_facts(result)
+        pass
         return result
 
     def single_act(self, question):
@@ -129,6 +145,7 @@ Think carefully step by step to execute the current task. If there are available
         self.history.append({"role": "user", "content": execute_task_prompt})
         try:
             result = self.execute(self.history, plan=self.plan)
+            pass
             return result
         except Exception as e:
             print(traceback.format_exc())

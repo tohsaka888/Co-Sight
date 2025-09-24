@@ -76,7 +76,9 @@ class VideoTool:
             extra_headers={'Content-Type': 'application/json',
                            'Authorization': 'Bearer %s' % self.llm_config['api_key']},
             model=self.llm_config['model'],
+
             messages=[
+
                 # {
                 #     "role": "system",
                 #     "content": [
@@ -84,6 +86,7 @@ class VideoTool:
                 #          "text": "你是一个非常有用的人工智能助手，请详细完整的回答用户问题,提供更多的细节，不要省略关键信息。"},
                 #     ],
                 # },
+
                 {
                     "role": "user",
                     "content": [
@@ -121,6 +124,7 @@ class VideoTool:
                         pass
             else:
                 pass
+        pass
         print(f'ask_question_about_video result {full_response}')
         return full_response
 

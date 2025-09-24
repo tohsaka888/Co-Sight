@@ -3,10 +3,21 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Literal, Optional, TypeAlias, Union
 from functools import wraps
 import time
+from openai import OpenAI
+import json
+from datetime import datetime
+import calendar
+from bs4 import BeautifulSoup
+import urllib.parse
+import os
+from urllib.parse import unquote
+from pathlib import Path
+from uuid import uuid4
 
 from app.manus.gate.format_gate import format_check
 from app.manus.tool.google_api_key import apikeys
 import requests
+from urllib.parse import urlparse
 
 
 def retry(max_retries=3, delay=1):
@@ -39,6 +50,433 @@ class SearchToolkit:
     This class provides methods for searching information on the web using
     search engines like Google, DuckDuckGo, Wikipedia and Wolfram Alpha, Brave.
     """
+    def __init__(self, llm_config, cache_dir: Optional[str] = None):
+        self.llm_config = llm_config
+        self.cache_dir = "tmp/"
+        if cache_dir:
+            self.cache_dir = cache_dir
+
+    _client: OpenAI = None
+    @property
+    def client(self) -> OpenAI:
+        llm_config = {"api_key": self.llm_config['api_key'],
+                      "base_url": self.llm_config['base_url']
+                      }
+        """Cached ChatOpenAI client instance."""
+        if self._client is None:
+            self._client = OpenAI(**llm_config)
+        return self._client
+
+    @retry()
+    @format_check()
+    def search_wiki_history_url(self, query: str) -> str:
+        r"""Search for the relevant URL of an old/historical Wikipedia page.
+
+        Args:
+            query (str): The task/question to ask about the old/historical Wikipedia page search
+
+        Returns:
+            str: The URL of the expected Wikipedia page.
+        """
+        full_response = ""
+
+        completion = self.client.chat.completions.create(
+            extra_headers={'Content-Type': 'application/json',
+                           'Authorization': 'Bearer %s' % self.llm_config['api_key']},
+            model=self.llm_config['model'],
+            messages=[
+                {
+                    "role": "system",
+                    "content": [
+                        {"type": "text",
+                         "text": """
+                         **System Prompt:**
+                        You are a highly specialized and honest Information Extraction Agent. Your sole purpose is to analyze a user's `task_prompt` and extract key information based on a predefined schema. You must strictly adhere to the output format.
+                        ### **Schema & Rules**
+                        You must extract information and format it into a single, valid JSON object.                        
+                        **JSON Schema:**
+                        * `subject`: (String, **Required**) The primary topic, theme, or entity of the prompt.
+                        * `year`: (Integer, Optional) The 4-digit year.
+                        * `month`: (Integer, Optional) The numeric month of the year (1-12). Default is 12.
+                        * `day`: (Integer, Optional) The numeric day of the month (1-31). Default is 31.                 
+                        **Processing Logic:**
+                        1.  **Subject Identification**: Always identify and extract the `subject`. This field must be present in the output.
+                        2.  **Date Inference**:
+                            * **Contextual Date**: All date calculations must be based on the current date: **2025-08-12**.
+                            * **Absolute Dates**: Extract explicit dates like "November 30, 2024".
+                            * **Relative Dates**: Accurately resolve relative expressions. For example:
+                                * "latest 2022" -> `2022-12-31`
+                                * "as of August 2023" -> `2023-08-31`
+                                * "before 2020" -> `2019-12-31`
+                                * "earliest 2023" -> `2023-1-1`
+                        3.  **Output Generation**:
+                            * Construct a single JSON object containing the extracted fields.
+                            * If a date component (`year`, `month`, or `day`) cannot be reasonably determined from the prompt, its corresponding key **MUST be omitted** from the final JSON object.
+                            * Your final response must contain **ONLY the JSON object** and no other text, explanation, or commentary.
+                        ### **Examples**                        
+                        **Input (`query`)**: "Find research papers about LLMs published around November 30, 2024."
+                        **Output format (MUST be strictly followed)**:
+                        {
+                          "subject": "Research papers about LLMs",
+                          "year": 2024,
+                          "month": 11,
+                          "day": 30
+                        }
+                         """},
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": query}
+                    ],
+                },
+            ],
+            temperature=self.llm_config['temperature'],
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+
+        # Process the streaming response for this chunk
+        for response_chunk in completion:
+            if response_chunk.choices:
+                delta = response_chunk.choices[0].delta
+                if hasattr(delta, "content") and delta.content:
+                    try:
+                        full_response += delta.content
+                    except Exception as ex:
+                        pass
+        print(f'full_response:{full_response}')
+        dict4wiki = self.process_llm_output(full_response)
+
+        url = self.get_wikipedia_url_for_date(dict4wiki["subject"], dict4wiki["year"], dict4wiki["month"], dict4wiki["day"])
+
+        if url is None:
+            title = self.get_wikipedia_article_title(dict4wiki["subject"])
+            url = self.get_wikipedia_url_for_date(title, dict4wiki["year"], dict4wiki["month"], dict4wiki["day"])
+
+        else:
+            title = dict4wiki["subject"]
+
+        print(f"The corresponding URL is: {url}, the title of the wikipedia page is: {title}")
+        return f"The corresponding URL is: {url}, the title of the wikipedia page is: {title}"
+
+
+    @format_check()
+    def process_llm_output(self, input_str):
+        """
+        This function takes a string in one of two formats and converts it into a Python dictionary.
+
+        It handles two cases:
+        1. A string containing a JSON object enclosed in ```json ... ```.
+        2. A string that is a plain JSON object.
+
+        Args:
+          input_str: The string to be converted.
+
+        Returns:
+          A dictionary representation of the input string, or None if parsing fails.
+        """
+        # Clean the string by removing leading/trailing whitespace.
+        cleaned_str = input_str.strip()
+
+        # Case 1: If the string is enclosed in markdown-style code fences, remove them.
+        if cleaned_str.startswith("```json"):
+            # Remove the starting '```json\n' and the ending '```'
+            cleaned_str = cleaned_str.replace("```json\n", "").replace("\n```", "").strip()
+
+        # Now, the string should be a valid JSON object.
+        # We use a try-except block to handle potential errors during parsing.
+        try:
+            # Use json.loads() to parse the cleaned string into a dictionary.
+            # 'loads' stands for 'load string'.
+            return json.loads(cleaned_str)
+        except json.JSONDecodeError as e:
+            # If the string is not valid JSON, print an error and return None.
+            print(f"Error decoding JSON: {e}")
+            return None
+
+
+    @format_check()
+    def get_wikipedia_url_at_timestamp(self, page_title: str, target_datetime: datetime, proxies: dict = None):
+        """
+        Core function: Gets the URL for the last revision of a Wikipedia page at or before a precise timestamp.
+
+        Args:
+            page_title (str): The title of the Wikipedia page.
+            target_datetime (datetime): The target date and time.
+            proxies (dict, optional): A dictionary for proxy configuration. Defaults to None.
+
+        Returns:
+            str: A permalink URL to the specific revision, or None if not found.
+        """
+        API_URL = "https://en.wikipedia.org/w/api.php"
+        headers = {'User-Agent': 'MyURLFetcher/1.0 (https://example.com/mybot)'}
+        timestamp_str = target_datetime.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        params = {
+            "action": "query", "prop": "revisions", "titles": page_title,
+            "rvlimit": "1", "rvdir": "older", "rvstart": timestamp_str, "format": "json"
+        }
+
+        try:
+            print(f"Searching for a version of '{page_title}' on or before {target_datetime.strftime('%Y-%m-%d')}...")
+            response = requests.get(API_URL, params=params, headers=headers, proxies=proxies)
+            response.raise_for_status()
+            data = response.json()
+
+            pages = data.get("query", {}).get("pages", {})
+            page_id = next(iter(pages))
+
+            if page_id == "-1" or "revisions" not in pages[page_id]:
+                print(f"Info: No revisions found for '{page_title}' on or before the specified date.")
+                return None
+
+            revision_id = pages[page_id]["revisions"][0]["revid"]
+            encoded_title = requests.utils.quote(page_title)
+            permalink = f"https://en.wikipedia.org/w/index.php?title={encoded_title}&oldid={revision_id}"
+
+            print(f"Success! Found URL for revision ID: {revision_id}")
+            return permalink
+
+        except requests.exceptions.RequestException as e:
+            print(f"A network error occurred: {e}")
+            return None
+        except Exception as e:
+            print(f"An error occurred while processing the response: {e}")
+            return None
+
+    @format_check()
+    def get_wikipedia_url_for_date(self, page_title: str, year: int, month: int = 12, day: int = 31):
+        """
+        Convenience function: Gets the URL by year, with optional month and day.
+        It safely handles invalid days (e.g., day=30 for February).
+
+        Args:
+            page_title (str): The title of the Wikipedia page.
+            year (int): The year (e.g., 2023).
+            month (int, optional): The month (1-12).
+            day (int, optional): The day (1-31).
+            proxies (dict, optional): Proxy configuration.
+
+        Returns:
+            str: A permalink URL to the specific revision, or None on failure.
+        """
+
+        proxies = {
+            'http': 'http://proxyhk.zte.com.cn:80',
+            'https': 'http://proxyhk.zte.com.cn:80'
+        }
+
+        if not 1 <= month <= 12:
+            print(f"Error: Invalid month '{month}'. Please use a number between 1 and 12.")
+            return None
+
+        # Safely determine the actual day to use
+        last_day_of_month = calendar.monthrange(year, month)[1]
+        actual_day = day
+        if day > last_day_of_month:
+            actual_day = last_day_of_month
+            print(
+                f"Info: Day '{day}' is invalid for the given month. Using the last day of the month instead: '{actual_day}'.")
+
+        # Create a datetime object for the last moment of that day
+        target_dt = datetime(year, month, actual_day, 23, 59, 59)
+
+        print(f"Query configuration: Year={year}, Month={month}, Day={actual_day} (End of day)")
+
+        return self.get_wikipedia_url_at_timestamp(page_title, target_dt, proxies)
+
+    @format_check()
+    def get_wikipedia_article_title(self, keyword: str) -> str:
+        """
+        Searches for a keyword on Wikipedia and returns the exact title of the
+        resulting article page without using the Wikipedia API.
+
+        Args:
+            keyword: The search term.
+
+        Returns:
+            The exact article title as listed on the Wikipedia page,
+            or an informational message if not found.
+        """
+        if not keyword:
+            return "Please provide a keyword to search."
+
+        search_url = "https://en.wikipedia.org/w/index.php"
+        params = {
+            "search": keyword
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+
+        try:
+            # The requests library automatically handles redirects
+            response = requests.get(search_url, params=params, headers=headers, timeout=10)
+            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # The main title of a Wikipedia article is in an <h1> tag with the id 'firstHeading'
+            heading_tag = soup.find('h1', id='firstHeading')
+
+            if heading_tag:
+                title = heading_tag.get_text()
+                # If the page is a search results page, the heading will be "Search results"
+                if title.lower() == "search results":
+                    # Try to find the title of the first search result instead
+                    first_result = soup.find('div', class_='mw-search-result-heading')
+                    if first_result and first_result.a:
+                        return first_result.a.get_text()
+                    else:
+                        return f"No direct article found for '{keyword}'."
+                else:
+                    return title
+            else:
+                return f"Could not determine the article title for '{keyword}'. The page structure may have changed."
+
+        except requests.exceptions.RequestException as e:
+            return f"An error occurred during the request: {e}"
+
+    @format_check()
+    def download_wiki_main_image(self, wiki_url):
+        """
+        Downloads the main/primary image from the given URL of a Wikipedia page
+
+        Args:
+        - wiki_url (str): The full URL of the Wikipedia page.
+        """
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+            }
+            response = requests.get(wiki_url, headers=headers)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            full_image_link_element = soup.select_one('.infobox a.image > img')
+            image_url = None
+
+            if full_image_link_element:
+                parent_a_tag = full_image_link_element.find_parent('a', class_='image')
+                if parent_a_tag and parent_a_tag.has_attr('href'):
+                    full_image_href = parent_a_tag['href']
+                    full_image_page_url = 'https://' + urlparse(wiki_url).netloc + full_image_href
+                    image_page_response = requests.get(full_image_page_url, headers=headers)
+                    image_page_response.raise_for_status()
+                    image_page_soup = BeautifulSoup(image_page_response.text, 'html.parser')
+                    full_image_element = image_page_soup.select_one('#file a.internal')
+                    if full_image_element and full_image_element.has_attr('href'):
+                        image_url = 'https:' + full_image_element['href']
+
+            if not image_url:
+                image_tag = soup.select_one('.infobox a:has(img) img')
+                if image_tag and image_tag.has_attr('src'):
+                    image_url = image_tag['src']
+                    if image_url.startswith('//'):
+                        image_url = 'https:' + image_url
+                else:
+                    print(f"Error: Could not find the main image on the page {wiki_url}.")
+                    return f"Error: Could not find the main image on the page {wiki_url}"
+
+            print(f"Found image URL: {image_url}")
+
+            image_response = requests.get(image_url, headers=headers, stream=True)
+            image_response.raise_for_status()
+
+            # Extract filename from URL
+            filename = os.path.basename(urlparse(image_url).path)
+
+            with open(filename, 'wb') as f:
+                for chunk in image_response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            print(f"Image successfully downloaded and saved as: {filename} in the current directory.")
+            return f"Image successfully downloaded and saved as: {filename} in the current directory."
+
+        except requests.exceptions.RequestException as e:
+            print(f"A network request failed: {e}")
+            return f"A network request failed: {e}"
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return f"An unexpected error occurred: {e}"
+
+
+    @format_check()
+    def download_wiki_commons_image(self, url):
+        """
+        Downloads the image for a  Wikimedia Commons file page with given URL.
+
+        Args:
+            url (str): The URL of the Wikimedia Commons page (e.g., 'https://commons.wikimedia.org/wiki/File:...'')
+        """
+        try:
+            # Send an HTTP GET request to the provided URL to get the page content
+            page_response = requests.get(url)
+            # Raise an exception if the request was unsuccessful (e.g., 404 Not Found, 500 Server Error)
+            page_response.raise_for_status()
+
+            # Parse the HTML content of the page using BeautifulSoup
+            soup = BeautifulSoup(page_response.text, 'html.parser')
+
+            # Find the specific 'div' element that contains the link to the full-resolution image.
+            # On Wikimedia Commons pages, this link is typically inside a div with the class "fullImageLink".
+            full_image_link_container = soup.find('div', class_='fullImageLink')
+            if not full_image_link_container:
+                print("Could not find the link container for the full image.")
+                return "Could not find the link container for the full image."
+
+            # Within that 'div', find the anchor 'a' tag which holds the URL in its 'href' attribute.
+            image_anchor_tag = full_image_link_container.find('a')
+            if not image_anchor_tag or 'href' not in image_anchor_tag.attrs:
+                print("Could not find the anchor tag with the image URL.")
+                return "Could not find the anchor tag with the image URL."
+
+            # Extract the URL of the full-resolution image from the 'href' attribute.
+            image_url = image_anchor_tag['href']
+
+            # Now, send another GET request, this time to the direct image URL.
+            # 'stream=True' is used to download large files efficiently without loading the entire content into memory at once.
+            image_response = requests.get(image_url, stream=True)
+            image_response.raise_for_status()
+
+            # Extract the filename from the image URL (e.g., "Brazilian_Army_-_CMA.png")
+            file_name = os.path.basename(image_url)
+
+            # Open a new file in binary write mode ('wb'). The file will have the name we just extracted.
+            with open(file_name, 'wb') as file:
+                # Iterate over the image data in chunks (8192 bytes at a time) and write each chunk to the file.
+                for chunk in image_response.iter_content(chunk_size=8192):
+                    file.write(chunk)
+
+            # Print a success message to the console.
+            print(f"Image successfully downloaded as: {file_name}")
+            return f"Image successfully downloaded as: {file_name}"
+
+        except requests.exceptions.RequestException as e:
+            # Handle any network-related errors that might occur during the requests.
+            print(f"An error occurred during download: {e}")
+            return f"An error occurred during download: {e}"
+
+    @format_check()
+    def get_wikipedia_revision_record(self, topic: str) -> str:
+        """
+        Get the URL to view the revision records of a Wikipedia page for a given topic.
+
+        Args:
+          topic: The topic of the Wikipedia page.
+
+        Returns:
+          The URL of the Wikipedia page's revision history, limited to 500 entries.
+        """
+        base_url = "https://en.wikipedia.org/w/index.php"
+        topic = self.get_wikipedia_article_title(topic)  # Match to the most likely entry on Wikipedia
+        encoded_topic = urllib.parse.quote(topic, safe='')
+        history_url = f"{base_url}?title={encoded_topic}&action=history&offset=&limit=500"
+        print("history url:", history_url)
+        return history_url
 
     @retry()
     @format_check()
@@ -57,6 +495,10 @@ class SearchToolkit:
         import wikipedia
         print(f"start search_wiki")
         result: str
+
+        # Match to the most likely entry on Wikipedia
+        entity = self.get_wikipedia_article_title(entity)
+        print('matched entity:', entity)
 
         try:
             result = wikipedia.summary(entity, sentences=5, auto_suggest=False)

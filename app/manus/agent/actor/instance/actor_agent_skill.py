@@ -49,6 +49,227 @@ def execute_code_skill():
     }
 
 
+def convert_pdf_page_to_png_skill():
+    return {
+        'skill_name': 'convert_pdf_page_to_png',
+        'skill_type': "function",
+        'display_name_zh': '执行代码',
+        'display_name_en': 'Execute Code',
+        'description_zh': '将 PDF 文件中的指定页转换为 PNG 图片',
+        'description_en': 'Convert the specified page in the PDF file to a PNG image',
+        'semantic_apis': ["api_code_execution"],
+        'function': SkillFunction(
+            id='4c44f9ad-be5c-4e6c-a9d8-1426b23828a9',
+            name='zagents_framework.app.manus.code_interpreter.execute_code',
+            description_zh='将 PDF 文件中的指定页转换为 PNG 图片',
+            description_en='Convert the specified page in the PDF file to a PNG image',
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pdf_path": {
+                        "type": "string",
+                        "description_zh": "输入的 PDF 文件路径",
+                        "description_en": "The path of the input PDF file"
+                    },
+                    "page_number": {
+                        "type": "string",
+                        "description_zh": "需要转换的页码 (从 1 开始)",
+                        "description_en": "Page numbers to be converted (starting from 1)"
+                    }
+                },
+                "required": ["pdf_path", "page_number"]
+            }
+        )
+    }
+
+
+def search_wiki_history_url_skill():
+    return {
+        'skill_name': 'search_wiki_history_url',
+        'skill_type': "function",
+        'display_name_zh': '搜索给定日期的维基百科URL',
+        'display_name_en': 'Search for the Wikipedia URL at a given date',
+        'description_zh': '返回给定日期的维基百科URL和维基百科上的标题',
+        'description_en': 'Return the URL of Wikipedia page for the given date and the title on the wikipedia page',
+        'semantic_apis': ["api_search"],
+        'function': SkillFunction(
+            id='3c44f9ad-be5c-4e6c-a9d8-1426b23828a0',
+            name='zagents_framework.app.manus.search_toolkit.search_google',
+            description_zh='搜索给定日期的维基百科URL',
+            description_en='Search for the Wikipedia URL at a given date',
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description_zh": "要搜索的查询内容和给定日期",
+                        "description_en": "Query to be searched and the given date"
+                    }
+                },
+                "required": ["query"]
+            }
+        )
+    }
+
+
+
+# def download_youtube_channel_thumbnails_skill():
+#     return {
+#         'skill_name': 'download_youtube_channel_thumbnails',
+#         'skill_type': "function",
+#         'display_name_zh': '下载视频缩略图图像为一个特定的YouTube频道和上传日期',
+#         'display_name_en': 'Download video thumbnail images for a specific YouTube channel and upload date',
+#         'description_zh': '下载视频缩略图图像为一个特定的YouTube频道和上传日期',
+#         'description_en': 'Download video thumbnail images for a specific YouTube channel and upload date',
+#         'semantic_apis': ["api_search"],
+#         'function': SkillFunction(
+#             id='3c44f9ad-be5c-4e6c-a9d8-1426b23828a0',
+#             name='zagents_framework.app.manus.search_toolkit.search_google',
+#             description_zh='下载视频缩略图图像为一个特定的YouTube频道和上传日期',
+#             description_en='Download video thumbnail images for a specific YouTube channel and upload date',
+#             parameters={
+#                 "type": "object",
+#                 "properties": {
+#                     "channel_name": {
+#                         "type": "string",
+#                         "description_zh": "YouTube频道的名称",
+#                         "description_en": "Name of the YouTube channel"
+#                     },
+#                     "upload_date": {
+#                         "type": "string",
+#                         "description_zh": "以“YYYY-MM-DD”格式上传日期",
+#                         "description_en": "Upload date in 'YYYY-MM-DD' format"
+#                     }
+#                 },
+#                 "required": ["channel_name", "upload_date"]
+#             }
+#         )
+#     }
+
+
+# def download_wiki_commons_image_skill():
+#     return {
+#         'skill_name': 'download_wiki_commons_image_url',
+#         'skill_type': "function",
+#         'display_name_zh': '下载具有给定URL的维基共享文件页面的图像',
+#         'display_name_en': 'Downloads the image for a  Wikimedia Commons file page with given URL',
+#         'description_zh': '下载具有给定URL的维基共享文件页面的图像',
+#         'description_en': 'Downloads the image for a  Wikimedia Commons file page with given URL',
+#         'semantic_apis': ["api_search"],
+#         'function': SkillFunction(
+#             id='3c44f9ad-be5c-4e6c-a9d8-1426b23828a0',
+#             name='zagents_framework.app.manus.search_toolkit.search_google',
+#             description_zh='下载具有给定URL的维基共享文件页面的图像',
+#             description_en='Downloads the image for a  Wikimedia Commons file page with given URL',
+#             parameters={
+#                 "type": "object",
+#                 "properties": {
+#                     "url": {
+#                         "type": "string",
+#                         "description_zh": "维基共享文件页面的URL",
+#                         "description_en": "URL of the Wikimedia Commons file page"
+#                     }
+#                 },
+#                 "required": ["url"]
+#             }
+#         )
+#     }
+
+
+
+# def count_youtube_videos_number_skill():
+#     return {
+#         'skill_name': 'count_youtube_videos_number',
+#         'skill_type': "function",
+#         'display_name_zh': '统计该年份上传至youtube频道的视频数量',
+#         'display_name_en': 'Count the number of videos uploaded to the youtube channel in the corresponding year',
+#         'description_zh': '统计该年份上传至youtube频道的视频数量',
+#         'description_en': 'Count the number of videos uploaded to the youtube channel in the corresponding year',
+#         'semantic_apis': ["api_search"],
+#         'function': SkillFunction(
+#             id='3c44f9ad-be5c-4e6c-a9d8-1426b23828a0',
+#             name='zagents_framework.app.manus.search_toolkit.search_google',
+#             description_zh='统计该年份上传至youtube频道的视频数量',
+#             description_en='Count the number of videos uploaded to the youtube channel in the corresponding year',
+#             parameters={
+#                 "type": "object",
+#                 "properties": {
+#                     "channel": {
+#                         "type": "string",
+#                         "description_zh": "youtube频道",
+#                         "description_en": "name of the youtube channel"
+#                     },
+#                     "year": {
+#                         "type": "string",
+#                         "description_zh": "检索年份",
+#                         "description_en": "corresponding year"
+#                     }
+#                 },
+#                 "required": ["channel", "year"]
+#             }
+#         )
+#     }
+
+
+
+def download_wiki_main_image_skill():
+    return {
+        'skill_name': 'download_wiki_main_image',
+        'skill_type': "function",
+        'display_name_zh': '从给定URL的维基百科页面的下载主图像',
+        'display_name_en': 'Download the main image from the Wikipedia page of the given URL',
+        'description_zh': '从给定URL的维基百科页面的下载主图像',
+        'description_en': 'Download the main image from the Wikipedia page of the given URL',
+        'semantic_apis': ["api_search"],
+        'function': SkillFunction(
+            id='3c44f9ad-be5c-4e6c-a9d8-1426b23828a0',
+            name='zagents_framework.app.manus.search_toolkit.search_google',
+            description_zh='从给定URL的维基百科页面的下载主图像',
+            description_en='Download the main image from the Wikipedia page of the given URL',
+            parameters={
+                "type": "object",
+                "properties": {
+                    "wiki_url": {
+                        "type": "string",
+                        "description_zh": "维基百科页面的URL",
+                        "description_en": "URL of the Wikimedia page"
+                    }
+                },
+                "required": ["wiki_url"]
+            }
+        )
+    }
+
+
+# def get_wikipedia_revision_record_skill():
+#     return {
+#         'skill_name': 'get_wikipedia_revision_record',
+#         'skill_type': "function",
+#         'display_name_zh': '获取URL以查看给定主题的维基百科页面的修订记录',
+#         'display_name_en': 'Get the URL to view the revision records of a Wikipedia page for a given topic/entry.',
+#         'description_zh': '获取URL以查看给定主题的维基百科页面的修订记录',
+#         'description_en': 'Get the URL to view the revision records of a Wikipedia page for a given topic/entry.',
+#         'semantic_apis': ["api_search"],
+#         'function': SkillFunction(
+#             id='3c44f9ad-be5c-4e6c-a9d8-1426b23828a0',
+#             name='zagents_framework.app.manus.search_toolkit.search_google',
+#             description_zh='获取URL以查看给定主题的维基百科页面的修订记录',
+#             description_en='Get the URL to view the revision records of a Wikipedia page for a given topic/entry.',
+#             parameters={
+#                 "type": "object",
+#                 "properties": {
+#                     "topic": {
+#                         "type": "string",
+#                         "description_zh": "维基百科的页面主题",
+#                         "description_en": "Topic/entry on Wikipedia"
+#                     }
+#                 },
+#                 "required": ["topic"]
+#             }
+#         )
+#     }
+
+
 def search_google_skill():
     return {
         'skill_name': 'search_google',
@@ -335,14 +556,14 @@ def file_download_skill():
         'skill_type': "function",
         'display_name_zh': '远程文件下载工具',
         'display_name_en': 'Remote File Download',
-        'description_zh': '下载远程文件并保存到指定路径（如果文件已存在，将自动覆盖）。',
-        'description_en': 'Download a remote file and save it to the specified path.If the file already exists, it will be overwritten.',
+        'description_zh': f'下载远程文件并保存到工作路径{os.getenv("WORKSPACE_PATH") or os.getcwd()}（如果文件已存在，将自动覆盖）。',
+        'description_en': f'Download a remote file and save it to the WORKSPACE path {os.getenv("WORKSPACE_PATH") or os.getcwd()}. If the file already exists, it will be overwritten.',
         'semantic_apis': ["api_file_management"],
         'function': SkillFunction(
             id='5c44f9ad-be5c-4e6c-a9d8-1426b23828a2',
             name='zagents_framework.app.manus.tool.file_toolkit.FileToolkit.file_saver',
-            description_zh='下载远程文件并保存到指定路径（如果文件已存在，将自动覆盖）。',
-            description_en='Download a remote file and save it to the specified path.If the file already exists, it will be overwritten.',
+            description_zh=f'下载远程文件并保存到工作{os.getenv("WORKSPACE_PATH") or os.getcwd()}（如果文件已存在，将自动覆盖）。',
+            description_en=f'Download a remote file and save it to the WORKSAPCE path {os.getenv("WORKSPACE_PATH") or os.getcwd()}. If the file already exists, it will be overwritten.',
             parameters={
                 "type": "object",
                 "properties": {
@@ -353,8 +574,8 @@ def file_download_skill():
                     },
                     "dest_path": {
                         "type": "string",
-                        "description_zh": "要保存文件的绝对路径（需在工作区内，WORKSPACE_PATH环境变量指定）",
-                        "description_en": "Absolute path of the file to save (must be within workspace specified by WORKSPACE_PATH environment variable)"
+                        "description_zh": f"要保存文件的绝对路径{os.getenv('WORKSPACE_PATH') or os.getcwd()}（需在工作区内，WORKSPACE_PATH环境变量指定）",
+                        "description_en": f"Absolute path of the file to save {os.getenv('WORKSPACE_PATH') or os.getcwd()}（ (must be within workspace specified by WORKSPACE_PATH environment variable)"
                     }
                 },
                 "required": ["url", "dest_path"]

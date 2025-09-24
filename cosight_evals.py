@@ -36,7 +36,6 @@ LOG_PATH = (
 def manus():
     def execute(question):
         manus = Manus(llm_for_plan, llm_for_act, llm_for_tool, llm_for_vision)
-
         result = manus.execute(question)
         print(f"final result is >>{result}<<")
         return result
@@ -95,18 +94,23 @@ def save_submissions(results: str, submissions_path: str):
 
 
 if __name__ == '__main__':
+
     os.makedirs(WORKSPACE_PATH, exist_ok=True)
     os.makedirs(LOG_PATH, exist_ok=True)
     os.environ['WORKSPACE_PATH'] = WORKSPACE_PATH.as_posix()
     os.environ['RESULTS_PATH'] = WORKSPACE_PATH.as_posix()
 
     manus = manus()
+
     results = gaia_level1(process_message=manus,
                           task_id=[
-                              # "67592f4a-f0ce-4d1f-be02-fde74748926f"
+                              "55aeb0ce-9170-4959-befb-59f6116887a4"
                           ],
+                          split='test',
                           postcall=save_results
                           )
+
+
     datestr = datetime.datetime.today().strftime('%Y%m%d%H%M%S')
     save_results(results, (WORKSPACE_PATH / f'result_{datestr}.json').as_posix())
 
