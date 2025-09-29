@@ -17,11 +17,11 @@ import asyncio
 import os
 import threading
 from typing import Any, Coroutine, Optional, TypeVar
+from urllib.parse import quote, urlparse, urlunparse
 
 from browser_use import Agent
-from browser_use.browser import BrowserSession, BrowserProfile
-from browser_use.browser.types import ProxySettings
-from langchain_openai import ChatOpenAI
+from browser_use.browser import BrowserSession, BrowserProfile, ProxySettings
+from browser_use.llm import ChatOpenAI
 
 from app.common.logger_util import logger
 
@@ -30,6 +30,48 @@ _browser_loop_thread: Optional[threading.Thread] = None
 _browser_loop_ready = threading.Event()
 _browser_loop_lock = threading.Lock()
 _T = TypeVar("_T")
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    value = value.strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        logger.warning(
+            "Invalid float value for %s=%s, falling back to %s",
+            name,
+            value,
+            default,
+        )
+        return default
+
+
+def _env_int(name: str, default: Optional[int] = None) -> Optional[int]:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(
+            "Invalid int value for %s=%s, falling back to %s",
+            name,
+            value,
+            default,
+        )
+        return default
 
 
 def _run_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -78,31 +120,42 @@ async def create_browser_session():
     os.makedirs(user_data_dir, exist_ok=True)
 
     # 创建browser profile配置
+    proxy_url = os.environ.get("BROWSER_PROXY_URL") or os.environ.get("PROXY_URL", "")
+    proxy_user = os.environ.get("BROWSER_PROXY_USER")
+    proxy_password = os.environ.get("BROWSER_PROXY_PASSWORD")
+    proxy_settings: Optional[ProxySettings] = None
+    if proxy_url:
+        proxy_settings = ProxySettings(
+            server=proxy_url,
+            username=proxy_user,
+            password=proxy_password,
+            bypass=os.environ.get("BROWSER_PROXY_BYPASS", "localhost,127.0.0.1,*.internal"),
+        )
+
     profile = BrowserProfile(
         # 核心配置：保持browser alive，支持多agent复用
-        keep_alive=True,
+        keep_alive=_env_bool("FORCE_KEEP_BROWSER_ALIVE", True),
         # 用户数据目录，保存cookies和认证信息
         user_data_dir=user_data_dir,
         # 代理配置
-        proxy=ProxySettings(server=os.environ.get("PROXY_URL", ""))
-        if os.environ.get("PROXY_URL")
-        else None,
+        proxy=proxy_settings,
         # 基本配置
-        headless=os.environ.get("HEADLESS", "False").lower() == "true",
-        disable_security=os.environ.get("DISABLE_SECURITY", "False").lower() == "true",
+        headless=_env_bool("HEADLESS", False),
+        disable_security=_env_bool("DISABLE_SECURITY", False),
         # 等待时间配置
-        minimum_wait_page_load_time=float(
-            os.environ.get("MINIMUM_WAIT_PAGE_LOAD_TIME", "5.0")
+        minimum_wait_page_load_time=_env_float("MINIMUM_WAIT_PAGE_LOAD_TIME", 5.0),
+        wait_for_network_idle_page_load_time=_env_float(
+            "WAIT_FOR_NETWORK_IDLE_PAGE_LOAD_TIME", 5.0
         ),
-        wait_for_network_idle_page_load_time=float(
-            os.environ.get("WAIT_FOR_NETWORK_IDLE_PAGE_LOAD_TIME", "5.0")
-        ),
-        wait_between_actions=float(os.environ.get("WAIT_BETWEEN_ACTIONS", "3.0")),
+        wait_between_actions=_env_float("WAIT_BETWEEN_ACTIONS", 3.0),
         # User Agent
         user_agent=os.environ.get(
             "USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
         ),
+        # AI Intergration
+        highlight_elements=True,
+        paint_order_filtering=True,
     )
 
     # 创建共享的browser session
@@ -122,7 +175,7 @@ class WebToolkit:
     _session_lock: Optional[asyncio.Lock] = None
 
     def __init__(self, llm_config):
-        self.llm_config = llm_config
+        self.llm_config: dict = llm_config
         self._llm: Optional[ChatOpenAI] = None
 
     @classmethod
@@ -145,7 +198,7 @@ class WebToolkit:
     async def _reset_browser_session(cls) -> None:
         if cls._shared_browser_session:
             try:
-                await cls._shared_browser_session.close()
+                await cls._shared_browser_session.kill()
             except Exception:  # pragma: no cover - best effort cleanup
                 logger.exception("Failed to close shared browser session during reset")
             finally:
@@ -179,19 +232,38 @@ class WebToolkit:
         try:
             browser_session = await self._get_shared_browser_session()
             if self._llm is None:
-                self._llm = ChatOpenAI(**self.llm_config)
+                llm_kwargs = {**self.llm_config}
+                llm_kwargs.setdefault("temperature", 0.0)
+                llm_kwargs["add_schema_to_system_prompt"] = _env_bool(
+                    "ADD_SCHEMA_TO_SYSTEM_PROMPT",
+                    llm_kwargs.get("add_schema_to_system_prompt", True),
+                )
+                self._llm = ChatOpenAI(**llm_kwargs)
             # 创建agent，复用共享的browser session
-            agent = Agent(
+            agent_kwargs: dict[str, Any] = dict(
                 task=task_prompt,
                 browser_session=browser_session,  # 使用共享的browser session
                 llm=self._llm,
                 use_vision=False,
+                max_actions_per_step=1,
+                directly_open_url=False,
+                flash_mode=_env_bool("FLASH_MODE", True),
+                extend_system_message="""
+ADDITIONAL INSTRUCTIONS:
+- Your answers **MUST NOT** contain any of the markdown code blocks such as ``` or ```json.
+- **Directly** return the final answer as a plain text **without any additional formatting**.
+""",
             )
+
+            max_tokens_per_step = _env_int("MAX_TOKENS_PER_STEP")
+            if max_tokens_per_step is not None:
+                agent_kwargs["max_tokens_per_step"] = max_tokens_per_step
+
+            agent = Agent(**agent_kwargs)
 
             # 运行agent
             result = await agent.run()
             final_result = result.final_result()
-
             logger.info("Task completed successfully with shared browser session")
             return final_result
 
