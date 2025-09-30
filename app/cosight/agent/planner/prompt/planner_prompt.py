@@ -50,6 +50,7 @@ def planner_system_prompt(question):
    - 信息收集（仅需 1-2 步）
    - 分析（1 步）
    - 报告创建（1 步）
+5. 当任务包含条件判断时，将条件与对应的行动放在同一步骤里，明确写出「如果…则执行…，否则跳过当前步骤」，禁止将条件与行动拆成多个步骤
 
 # 重新规划规则
 1. 首先评估是否需要调整：
@@ -101,6 +102,7 @@ You are a planning assistant. Your task is to create simple, actionable plans wi
    - Information gathering (just 1-2 steps)
    - Analysis (1 step)
    - Report creation (1 step)
+5. Whenever the task contains conditional logic, keep the condition and the resulting action in the same step (e.g., "If condition is met, do X; otherwise skip this step") instead of splitting them into separate steps
 
 # Replanning Rules
 1. First evaluate if changes are really needed
@@ -133,6 +135,7 @@ You are a planning assistant. Your task is to create simple, actionable plans wi
     - 依赖项：{步骤索引: [依赖步骤索引1, 依赖步骤索引2, ...]}
 5. 不要在计划步骤中使用编号列表，仅使用纯文本描述
 6. 对于信息收集任务，确保计划包含全面的搜索和分析步骤，最终生成详细报告。
+7. 当任务包含条件判断时，必须在同一步骤中同时描述条件、对应行动以及条件不满足时的处理方式（例如“如果条件成立则执行操作，否则跳过当前步骤”），禁止将条件和行动拆成多个步骤
 
 # 重新规划规则
 1. 首先评估计划的可行性：
@@ -184,6 +187,7 @@ You are a planning assistant. Your task is to create, adjust, and finalize detai
     - dependencies: {step_index: [dependent_step_index1, dependent_step_index2, ...]}
 5. Do not use numbered lists in the plan steps - use plain text descriptions only
 6. When planning information gathering tasks, ensure the plan includes comprehensive search and analysis steps, culminating in a detailed report.
+7. Whenever the task involves conditional logic, describe the condition, the resulting action, and what to do when the condition is not met within the same step (e.g., "If condition holds, do X; otherwise skip this step"); never split the condition and action into separate steps
 
 
 # Replanning Rules
@@ -237,21 +241,25 @@ def planner_create_plan_prompt(question, output_format=""):
 创建一个包含 3-5 个步骤的简洁且聚焦的计划以完成此任务：{question}
 请记住保持步骤简洁，并仅包含真正必要的内容。
 确保每个步骤都写明需要执行的行动以及该行动要达成的目标。
+当涉及条件判断时，在同一步骤中描述条件、执行的操作以及条件不满足时的处理方式（例如直接写“如果满足条件就执行操作，否则跳过当前步骤”）。
 """
     elif is_claude and not contains_chinese:
         create_plan_prompt = f"""
 Create a simple, focused plan with 3-5 steps to accomplish this task: {question}
 Make each step pair the action to do with the goal that must be reached, keep everything concise, and include only what's truly necessary.
+When you need conditional logic, keep the condition and its action together in the same step (e.g., "If the condition holds, do X; otherwise skip this step").
 """
     elif not is_claude and contains_chinese:
         create_plan_prompt = f"""
 使用 create_plan 工具，制定一个详细的计划以完成此任务: {question}
 请确保每个步骤都清楚写出要做的行动以及该行动所要实现的目标。
+若任务包含条件判断，请在同一步骤中描述条件、执行动作以及条件不满足时的处理方式（例如“如果条件成立则执行操作，否则跳过当前步骤”）。
 """
     else:
         create_plan_prompt = f"""
 Using the create_plan tool, create a detailed plan to accomplish this task: {question}
 Ensure every step ties a concrete action to the goal that step should fulfill.
+If conditional logic is required, describe the condition, the action, and what happens when the condition is not met within the same step (e.g., "If the condition holds, perform X; otherwise skip this step").
 """
 
     if contains_chinese:
@@ -301,6 +309,7 @@ def planner_re_plan_prompt(question, plan, output_format=""):
 检查是否需要调整计划。只有在绝对必要时才进行修改。
 保持简单——如果计划有效，只需说“计划无需修改，继续执行”
 如果需要调整，仅关注必要的修改，并确保每个步骤同时描述行动与目标。
+如涉及条件判断，保持条件与对应的行动及未满足时的处理方式在同一步骤中（“如果…则…，否则跳过当前步骤”），不要拆分成多个步骤。
     """
         else:
             replan_prompt += f"""
@@ -309,6 +318,7 @@ def planner_re_plan_prompt(question, plan, output_format=""):
 
 根据系统提示中的重新规划规则评估并调整当前计划。
 确保每个步骤继续同时描述行动和需要达成的目标。
+遇到条件判断时，应在同一步骤中描述条件、执行动作以及条件不满足时的处理方式（例如“如果条件成立则执行操作，否则跳过当前步骤”）。
     """
     else:
         replan_prompt = f"""
@@ -328,6 +338,7 @@ Current plan status:
 Check if the plan needs adjustment. Only make changes if absolutely necessary.
 Keep it simple - if the plan is working, just say "Plan does not need adjustment, continue execution"
 If changes are needed, focus only on essential modifications and keep each step paired with the goal it must achieve.
+When conditional logic appears, keep the condition, its action, and the fallback (e.g., "otherwise skip this step") together within the same step instead of splitting them apart.
     """
         else:
             replan_prompt += f"""
@@ -336,6 +347,7 @@ Current plan status:
 
 Evaluate and adjust the current plan according to the replanning rules in the system prompt.
 Keep every step described as an action plus the goal it must deliver.
+If you need conditional logic, ensure the condition, the action, and what to do when the condition fails stay in the same step (e.g., "If condition holds, perform X; otherwise skip this step").
     """
 
     return replan_prompt
