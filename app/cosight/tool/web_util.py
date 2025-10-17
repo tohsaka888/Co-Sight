@@ -59,7 +59,7 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-def _env_int(name: str, default: Optional[int] = None) -> Optional[int]:
+def _env_int(name: str, default: int = 1) -> int:
     value = os.environ.get(name)
     if value is None or not value.strip():
         return default
@@ -130,7 +130,9 @@ async def create_browser_session():
             server=proxy_url,
             username=proxy_user,
             password=proxy_password,
-            bypass=os.environ.get("BROWSER_PROXY_BYPASS", "localhost,127.0.0.1,*.internal"),
+            bypass=os.environ.get(
+                "BROWSER_PROXY_BYPASS", "localhost,127.0.0.1,*.internal"
+            ),
         )
 
     profile = BrowserProfile(
@@ -219,6 +221,77 @@ class WebToolkit:
             finally:
                 cls._shared_browser_session = None
 
+    @classmethod
+    def has_active_browser_session(cls) -> bool:
+        """Check if there is an active browser session.
+
+        This method allows external agents to check if a browser session currently exists.
+
+        Returns:
+            bool: True if there is an active browser session, False otherwise.
+        """
+        return cls._shared_browser_session is not None
+
+    @classmethod
+    def check_browser_session(cls, task_requires_browser: bool) -> str:
+        """Check browser session status and auto-close if not needed for current task.
+
+        This method allows external actor_agent to:
+        1. Check if a browser session currently exists
+        2. Auto-close the browser if the current task does not require it
+
+        Args:
+            task_requires_browser (bool): Whether the current task requires browser interaction.
+                                         If False and a browser session exists, it will be closed automatically.
+
+        Returns:
+            str: A message indicating the browser session status and any actions taken.
+        """
+        has_session = cls.has_active_browser_session()
+
+        if not has_session:
+            logger.info("No active browser session exists")
+            return "No active browser session exists"
+
+        if not task_requires_browser:
+            logger.info(
+                "Browser session exists but current task does not require it - auto-closing"
+            )
+            try:
+                _run_in_browser_loop(cls._reset_browser_session())
+                logger.info("Browser session auto-closed successfully")
+                return "Browser session existed but was not needed for current task - closed successfully"
+            except Exception as e:
+                logger.error(
+                    f"Failed to auto-close browser session: {str(e)}", exc_info=True
+                )
+                return f"Failed to auto-close browser session: {str(e)}"
+        else:
+            logger.info("Browser session exists and is available for current task")
+            return "Browser session exists and is ready for use in current task"
+
+    @classmethod
+    def close_browser(cls) -> str:
+        """Close the shared browser session.
+
+        This method allows external agents to explicitly close the browser when it's no longer needed.
+        For example, during the planning phase, if the agent determines that the current browser
+        session is no longer required, it can call this method to clean up resources.
+
+        Returns:
+            str: A message indicating whether the browser was closed successfully or if there was no active session.
+        """
+        logger.info("External request to close shared browser session")
+        try:
+            _run_in_browser_loop(cls._reset_browser_session())
+            logger.info(
+                "Shared browser session closed successfully by external request"
+            )
+            return "Browser session closed successfully"
+        except Exception as e:
+            logger.error(f"Failed to close browser session: {str(e)}", exc_info=True)
+            return f"Failed to close browser session: {str(e)}"
+
     def browser_use(self, task_prompt: str):
         r"""A powerful toolkit which can simulate the browser interaction to solve the task which needs multi-step actions.
 
@@ -247,34 +320,31 @@ class WebToolkit:
         try:
             browser_session = await self._get_shared_browser_session()
             if self._llm is None:
-                llm_kwargs = {**self.llm_config}
-                llm_kwargs.setdefault("temperature", 0.0)
-                llm_kwargs["add_schema_to_system_prompt"] = _env_bool(
-                    "ADD_SCHEMA_TO_SYSTEM_PROMPT",
-                    llm_kwargs.get("add_schema_to_system_prompt", True),
+                self._llm = ChatOpenAI(
+                    **self.llm_config,
+                    max_completion_tokens=8192,
+                    temperature=0.0,
+                    add_schema_to_system_prompt=_env_bool(
+                        "ADD_SCHEMA_TO_SYSTEM_PROMPT", True
+                    ),
                 )
-                self._llm = ChatOpenAI(**llm_kwargs)
             # 创建agent，复用共享的browser session
-            agent_kwargs: dict[str, Any] = dict(
+
+            agent = Agent(
                 task=task_prompt,
                 browser_session=browser_session,  # 使用共享的browser session
                 llm=self._llm,
                 use_vision=False,
-                max_actions_per_step=1,
+                max_actions_per_step=_env_int("MAX_ACTIONS_PER_STEP", 1),
                 directly_open_url=False,
                 flash_mode=_env_bool("FLASH_MODE", True),
+                include_tool_call_examples=_env_bool("INCLUDE_TOOL_CALL_EXAMPLES", True),
                 extend_system_message="""
-ADDITIONAL INSTRUCTIONS:
+YOU **MUST** FOLLOW THESE INSTRUCTIONS:
 - Your answers **MUST NOT** contain any of the markdown code blocks such as ``` or ```json.
 - **Directly** return the final answer as a plain text **without any additional formatting**.
 """,
             )
-
-            max_tokens_per_step = _env_int("MAX_TOKENS_PER_STEP")
-            if max_tokens_per_step is not None:
-                agent_kwargs["max_tokens_per_step"] = max_tokens_per_step
-
-            agent = Agent(**agent_kwargs)
 
             # 运行agent
             result = await agent.run()
