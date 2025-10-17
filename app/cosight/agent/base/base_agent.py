@@ -30,6 +30,7 @@ from app.cosight.tool.tool_result_processor import ToolResultProcessor
 from app.cosight.task.plan_report_manager import plan_report_event_manager
 from app.common.logger_util import logger
 from app.cosight.agent.base.tool_arg_mapping import FUNCTION_ARG_MAPPING
+from app.cosight.tool.web_util import WebToolkit
 
 
 class BaseAgent:
@@ -363,21 +364,43 @@ class BaseAgent:
         # 未在清单中的工具：不返回任何步骤
         return []
 
-    def execute(self, messages: List[Dict[str, Any]], step_index=None, max_iteration=10):  #调试修改的10
-        for i in range(max_iteration):
-            logger.info(f'act agent call with tools message: {messages}')
-            response = self.llm.create_with_tools(messages, self.tools)
-            logger.info(f'act agent call with tools response: {response}')
+    def _cleanup_browser_session(self):
+        """在所有step执行完成后检查并关闭浏览器会话"""
+        try:
+            # 检查是否存在活跃的浏览器会话
+            if WebToolkit.has_active_browser_session():
+                logger.info("检测到活跃的浏览器会话,准备关闭")
+                # 关闭浏览器会话
+                result = WebToolkit.close_browser()
+                logger.info(f"浏览器会话清理结果: {result}")
+            else:
+                logger.info("没有活跃的浏览器会话需要清理")
+        except Exception as e:
+            logger.error(f"清理浏览器会话时发生错误: {str(e)}", exc_info=True)
 
-            # Process initial response
-            result = self._process_response(response, messages, step_index)
-            logger.info(f'iter {i} for {self.agent_instance.instance_name} call tools result: {result}')
-            if result:
-                return result
+    def execute(
+        self, messages: List[Dict[str, Any]], step_index=None, max_iteration=10
+    ):
+        try:
+            for i in range(max_iteration):
+                logger.info(f"act agent call with tools message: {messages}")
+                response = self.llm.create_with_tools(messages, self.tools)
+                logger.info(f"act agent call with tools response: {response}")
 
-        if max_iteration > 1:
-            return self._handle_max_iteration(messages, step_index)
-        return messages[-1].get("content")
+                # Process initial response
+                result = self._process_response(response, messages, step_index)
+                logger.info(
+                    f"iter {i} for {self.agent_instance.instance_name} call tools result: {result}"
+                )
+                if result:
+                    return result
+
+            if max_iteration > 1:
+                return self._handle_max_iteration(messages, step_index)
+            return messages[-1].get("content")
+        finally:
+            # 在所有step执行完成后,检查并关闭浏览器会话
+            self._cleanup_browser_session()
 
     def _process_response(self, response, messages, step_index):
         if not response.tool_calls:

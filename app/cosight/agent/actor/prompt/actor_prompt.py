@@ -39,6 +39,7 @@ You are an assistant helping complete complex tasks. Your goal is to execute tas
 
 # General Rules
 1. You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.
+2. At the beginning of each task, you MUST call check_browser_session tool. If the current task does not require using browser, please set task_requires_browser to False, for example: report generation/data analysis and so on do not need to use browser.
 
 # Task Execution Rules:
 1. For all output tasks (file generation and information gathering):
@@ -221,6 +222,7 @@ def actor_system_prompt_zh(work_space_path):
 
 # 通用规则
 1. 在每次函数调用前必须进行充分规划，并深入反思之前函数调用的结果。不要仅通过函数调用完成整个过程，这可能会影响你的问题解决能力和洞察力。
+2. 在任务开始时，必须调用 check_browser_session 工具，如果当前任务不需要使用browser，请将task_requires_browser设置为False，例如：报告生成/数据分析等不需要使用browser，请将task_requires_browser设置为False。
 
 # 任务执行规则：
 1. 对于所有输出任务（文件生成和信息收集）：

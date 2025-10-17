@@ -227,6 +227,34 @@ def browser_use_skill():
         )
     }
 
+def check_browser_session_skill():
+    return {
+        "skill_name": "check_browser_session",
+        "skill_type": "function",
+        "display_name_zh": "检查浏览器会话状态",
+        "display_name_en": "Check Browser Session Status",
+        "description_zh": "检查当前浏览器会话是否存在，如果存在但当前任务不需要使用浏览器，则自动关闭浏览器会话",
+        "description_en": "Check if a browser session exists. If it exists but the current task does not require browser interaction, automatically close the browser session",
+        "semantic_apis": ["api_browser_management"],
+        "function": SkillFunction(
+            id="2c44f9ad-be5c-4e6c-a9d8-1426b23828c1",
+            name="app.cosight.browser_toolkit.check_browser_session",
+            description_zh="检查浏览器会话状态并根据当前任务需求自动关闭不需要的会话",
+            description_en="Check browser session status and auto-close if not needed for current task",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "task_requires_browser": {
+                        "type": "boolean",
+                        "description_zh": "当前任务是否需要浏览器交互。如果为 false 且浏览器会话存在，会自动关闭浏览器",
+                        "description_en": "Whether the current task requires browser interaction. If false and a browser session exists, it will be closed automatically",
+                    }
+                },
+                "required": ["task_requires_browser"],
+            },
+        ),
+    }
+
 
 def fetch_website_content_skill():
     return {
