@@ -12,22 +12,46 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+import os
 import httpx
-from openai import OpenAI
 
 from app.common.logger_util import logger
 from app.cosight.llm.chat_llm import ChatLLM
 from config.config import *
 
+# Langfuse可观测性集成（可选）
+# 如果启用Langfuse，使用包装的OpenAI客户端；否则使用原生OpenAI
+langfuse_enabled = os.environ.get("LANGFUSE_ENABLED", "false").lower() in ("true", "1", "yes")
+
+if langfuse_enabled:
+    try:
+        from langfuse.openai import OpenAI
+        logger.info("✅ Langfuse tracing enabled")
+    except ImportError:
+        from openai import OpenAI
+        logger.warning("❌ Langfuse not installed, using standard OpenAI client. Install: pip install langfuse")
+else:
+    from openai import OpenAI
+    logger.info("Langfuse tracing disabled")
+
 
 def set_model(model_config: dict[str, Optional[str | int | float]]):
+    # 从环境变量读取超时配置（秒），默认180秒（3分钟）
+    timeout_seconds = float(os.environ.get("LLM_TIMEOUT", "180"))
+    
     http_client_kwargs = {
         "headers": {
             'Content-Type': 'application/json',
             'Authorization': model_config['api_key']
         },
         "verify": False,
-        "trust_env": False
+        "trust_env": False,
+        "timeout": httpx.Timeout(
+            connect=30.0,        # 连接超时：30秒
+            read=timeout_seconds,    # 读取超时：可配置，默认180秒
+            write=30.0,          # 写入超时：30秒
+            pool=10.0            # 连接池超时：10秒
+        )
     }
 
     if model_config['proxy']:
@@ -50,6 +74,8 @@ def set_model(model_config: dict[str, Optional[str | int | float]]):
         chat_llm_kwargs['max_tokens'] = model_config['max_tokens']
     if model_config.get('temperature') is not None:
         chat_llm_kwargs['temperature'] = model_config['temperature']
+    if model_config.get('thinking_mode') is not None:
+        chat_llm_kwargs['thinking_mode'] = model_config['thinking_mode']
 
     return ChatLLM(**chat_llm_kwargs)
 

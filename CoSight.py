@@ -37,6 +37,36 @@ class CoSight:
         self.plan_id = message_uuid if message_uuid else f"plan_{int(time.time())}"
         self.plan = Plan()
         TaskManager.set_plan(self.plan_id, self.plan)
+        
+        # 设置Langfuse追踪上下文
+        # 使用plan_id作为session_id，让整个任务的所有traces都关联在一起
+        # trace_id会自动生成，每个Agent调用都是独立的trace
+        # 这样在Langfuse中可以看到完整的session replay
+        plan_llm.set_trace_context(
+            trace_id=None,  # 不指定trace_id，让每次调用自动生成
+            session_id=self.plan_id,  # 使用plan_id作为session_id
+            tags=["planning"],
+            metadata={"agent_type": "planner", "plan_id": self.plan_id}
+        )
+        act_llm.set_trace_context(
+            trace_id=None,
+            session_id=self.plan_id,
+            tags=["execution"],
+            metadata={"agent_type": "actor", "plan_id": self.plan_id}
+        )
+        tool_llm.set_trace_context(
+            trace_id=None,
+            session_id=self.plan_id,
+            tags=["tool"],
+            metadata={"agent_type": "tool", "plan_id": self.plan_id}
+        )
+        vision_llm.set_trace_context(
+            trace_id=None,
+            session_id=self.plan_id,
+            tags=["vision"],
+            metadata={"agent_type": "vision", "plan_id": self.plan_id}
+        )
+        
         self.task_planner_agent = TaskPlannerAgent(create_planner_instance("task_planner_agent"), plan_llm,
                                                    self.plan_id)
         self.act_llm = act_llm  # Store llm for later use
@@ -45,6 +75,16 @@ class CoSight:
 
     @time_record
     def execute(self, question, output_format=""):
+        # 更新所有LLM的metadata，添加任务信息
+        task_metadata = {
+            "task_question": question[:200] if len(question) > 200 else question,
+            "plan_id": self.plan_id
+        }
+        
+        for llm in [self.task_planner_agent.llm, self.act_llm, self.tool_llm, self.vision_llm]:
+            if hasattr(llm, 'current_metadata'):
+                llm.current_metadata.update(task_metadata)
+        
         create_task = question
         retry_count = 0
         while not self.plan.get_ready_steps() and retry_count < 3:

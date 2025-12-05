@@ -378,13 +378,35 @@ class MessageService {
             }
         }
 
+        // 处理网页抓取工具，提取URL
+        if (['fetch_website_content', 'fetch_website_content_with_images', 'fetch_website_images_only'].includes(toolCallRecord.tool_name)) {
+            const processedResult = toolCallRecord.tool_result;
+            if (processedResult && processedResult.url) {
+                url = processedResult.url;
+            }
+        }
+
         // 处理文件保存工具，提取路径
         if (toolCallRecord.tool_name === 'file_saver') {
             try {
-                const args = JSON.parse(toolCallRecord.tool_args);
-                if (args.file_path) {
-                    path = buildApiWorkspacePath(args.file_path);
-                    const filename = extractFileName(args.file_path);
+                // 优先使用 processed_result.file_path（已包含完整API路径）
+                const processed = toolCallRecord.tool_result;
+                let filePath = null;
+                
+                if (processed && processed.file_path) {
+                    // processed_result.file_path 已经包含完整的 API 路径前缀
+                    filePath = processed.file_path;
+                } else {
+                    // 回退到从 tool_args 中提取
+                    const args = JSON.parse(toolCallRecord.tool_args);
+                    if (args.file_path) {
+                        filePath = buildApiWorkspacePath(args.file_path);
+                    }
+                }
+                
+                if (filePath) {
+                    path = filePath;
+                    const filename = extractFileName(filePath);
                     if (filename) {
                         descriptionOverride = (window.I18nService ? `${window.I18nService.t('info_saved_to')}${filename}` : `信息保存到:${filename}`);
                     }
@@ -445,6 +467,27 @@ class MessageService {
         if (toolCallRecord.tool_name === 'file_saver' && descriptionOverride) {
             resultText = descriptionOverride;
             descriptionOverride = '';
+        }
+
+        // 处理网页抓取类工具：从参数或结果中提取原始 website_url，用于在右侧 iframe 中直接打开
+        if (['fetch_website_content', 'fetch_website_content_with_images', 'fetch_website_images_only'].includes(toolCallRecord.tool_name)) {
+            try {
+                // 优先从 tool_args 中解析 website_url
+                if (!url && toolCallRecord.tool_args) {
+                    try {
+                        const args = JSON.parse(toolCallRecord.tool_args || '{}');
+                        url = args.website_url || args.url || url;
+                    } catch (e) {
+                        console.warn('解析网页抓取工具参数失败:', e);
+                    }
+                }
+                // 再从结构化结果中兜底提取 url（with_images / images_only 会返回 dict，包含 url 字段）
+                if (!url && toolCallRecord.tool_result && typeof toolCallRecord.tool_result === 'object') {
+                    url = toolCallRecord.tool_result.url || toolCallRecord.tool_result.website_url || url;
+                }
+            } catch (e) {
+                console.warn('为网页抓取工具提取 URL 失败:', e);
+            }
         }
 
         // 根据状态生成合适的描述

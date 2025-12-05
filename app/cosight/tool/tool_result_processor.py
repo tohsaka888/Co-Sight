@@ -702,7 +702,7 @@ class ToolResultProcessor:
                     parsed_args = json.loads(tool_args)
                     if isinstance(parsed_args, dict):
                         # 尝试多种可能的文件名key
-                        for key in ['file_path', 'file', 'filename']:
+                        for key in ['file_path', 'file', 'filename', 'file_name']:
                             if key in parsed_args:
                                 file_path = parsed_args[key]
                                 break

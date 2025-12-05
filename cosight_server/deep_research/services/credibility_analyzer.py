@@ -260,7 +260,10 @@ Please start analysis:"""
             messages = [{"role": "user", "content": prompt}]
             logger.info(f"开始调用LLM进行可信信息分析，语言: {language}, prompt长度: {len(prompt)}")
             
-            response = llm.chat_to_llm(messages)
+            # 使用 asyncio.to_thread 在线程池中执行同步的 LLM 调用，避免阻塞事件循环
+            # 这样可信分析就不会阻塞 manus 主流程
+            import asyncio
+            response = await asyncio.to_thread(llm.chat_to_llm, messages)
             logger.info(f"LLM响应长度: {len(response) if response else 0}")
             
             # 解析响应并补全五类

@@ -171,6 +171,80 @@ function hideTooltip() {
     }, 100);
 }
 
+// 初始化 tooltip 的智能鼠标悬停行为：
+// 1. 默认 pointer-events: none，不挡住节点
+// 2. 鼠标靠近时（距离 < 30px），启用 pointer-events: auto，可以进入 tooltip 并滚动
+// 3. 鼠标真正进入 tooltip 后，保持显示并可滚动
+// 4. 鼠标离开 tooltip 时，恢复 pointer-events: none 并隐藏
+(function initTooltipBehavior() {
+    try {
+        const tooltipEl = document.getElementById('tooltip');
+        if (!tooltipEl) return;
+
+        let isMouseNearTooltip = false;
+        let isMouseInTooltip = false;
+
+        // 全局监听鼠标移动，检测是否靠近 tooltip
+        document.addEventListener('mousemove', function(e) {
+            const style = window.getComputedStyle(tooltipEl);
+            if (style.opacity === '0' || style.visibility === 'hidden') {
+                return;
+            }
+
+            const rect = tooltipEl.getBoundingClientRect();
+            const x = e.clientX;
+            const y = e.clientY;
+
+            // 计算鼠标到 tooltip 的距离
+            const distance = getDistanceToRect(x, y, rect);
+
+            // 如果距离 < 30px，启用 pointer-events
+            if (distance < 30) {
+                if (!isMouseNearTooltip) {
+                    isMouseNearTooltip = true;
+                    tooltipEl.classList.add('hover-active');
+                }
+            } else {
+                if (isMouseNearTooltip && !isMouseInTooltip) {
+                    isMouseNearTooltip = false;
+                    tooltipEl.classList.remove('hover-active');
+                }
+            }
+        });
+
+        // 鼠标进入 tooltip 时，清除隐藏定时器，保持显示
+        tooltipEl.addEventListener('mouseenter', function() {
+            isMouseInTooltip = true;
+            if (typeof tooltipTimeout !== 'undefined' && tooltipTimeout) {
+                clearTimeout(tooltipTimeout);
+                tooltipTimeout = null;
+            }
+            tooltipEl.classList.add('hover-active');
+        });
+
+        // 鼠标离开 tooltip 时，延迟隐藏并恢复穿透
+        tooltipEl.addEventListener('mouseleave', function() {
+            isMouseInTooltip = false;
+            isMouseNearTooltip = false;
+            tooltipEl.classList.remove('hover-active');
+            if (typeof hideTooltip === 'function') {
+                hideTooltip();
+            }
+        });
+
+        console.log('Tooltip 智能悬停行为已初始化');
+    } catch (err) {
+        console.warn('初始化 tooltip 行为失败:', err);
+    }
+
+    // 计算点到矩形的最短距离
+    function getDistanceToRect(x, y, rect) {
+        const dx = Math.max(rect.left - x, 0, x - rect.right);
+        const dy = Math.max(rect.top - y, 0, y - rect.bottom);
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+})();
+
 // 获取状态文本
 function getStatusText(status) {
     return statusTexts[status] || (window.I18nService ? window.I18nService.t('unknown') : '未知');
@@ -207,10 +281,24 @@ function getWorkflowByNodeId(nodeId) {
                 // 处理文件保存工具，提取路径
                 if (toolName === 'file_saver') {
                     try {
-                        const args = JSON.parse(toolEvent.tool_args || '{}');
-                        if (args.file_path) {
-                            path = buildApiWorkspacePath(args.file_path);
-                            const filename = extractFileName(args.file_path);
+                        // 优先使用 processed_result.file_path（已包含完整API路径）
+                        const processed = toolEvent.tool_result;
+                        let filePath = null;
+                        
+                        if (processed && processed.file_path) {
+                            // processed_result.file_path 已经包含完整的 API 路径前缀
+                            filePath = processed.file_path;
+                        } else {
+                            // 回退到从 tool_args 中提取
+                            const args = JSON.parse(toolEvent.tool_args || '{}');
+                            if (args.file_path) {
+                                filePath = buildApiWorkspacePath(args.file_path);
+                            }
+                        }
+                        
+                        if (filePath) {
+                            path = filePath;
+                            const filename = extractFileName(filePath);
                             if (filename) {
                                 descriptionOverride = (window.I18nService ? `${window.I18nService.t('info_saved_to')}${filename}` : `信息保存到:${filename}`);
                             }
@@ -345,10 +433,24 @@ function getWorkflowByNodeId(nodeId) {
         // 处理文件保存工具，提取路径
         if (toolName === 'file_saver') {
             try {
-                const args = JSON.parse(toolCall.tool_args || '{}');
-                if (args.file_path) {
-                    path = buildApiWorkspacePath(args.file_path);
-                    const filename = extractFileName(args.file_path);
+                // 优先使用 processed_result.file_path（已包含完整API路径）
+                const processed = toolCall.tool_result;
+                let filePath = null;
+                
+                if (processed && processed.file_path) {
+                    // processed_result.file_path 已经包含完整的 API 路径前缀
+                    filePath = processed.file_path;
+                } else {
+                    // 回退到从 tool_args 中提取
+                    const args = JSON.parse(toolCall.tool_args || '{}');
+                    if (args.file_path) {
+                        filePath = buildApiWorkspacePath(args.file_path);
+                    }
+                }
+                
+                if (filePath) {
+                    path = filePath;
+                    const filename = extractFileName(filePath);
                     if (filename) {
                         descriptionOverride = (window.I18nService ? `${window.I18nService.t('info_saved_to')}${filename}` : `信息保存到:${filename}`);
                     }
@@ -651,6 +753,12 @@ function createNodeToolPanel(nodeId, nodeName, sticky = false) {
         </div>
     `;
 
+    // ====== 在添加到 DOM 之前就强制设置位置 ======
+    panel.style.position = 'absolute';
+    panel.style.top = '50px';
+    panel.style.left = '16px';
+    console.log(`[创建面板 ${nodeId}] 初始位置设置: top=50px, left=16px`);
+    
     container.appendChild(panel);
     nodeToolPanels.set(nodeId, panel);
 
@@ -699,11 +807,17 @@ function createNodeToolPanel(nodeId, nodeName, sticky = false) {
     // 显示面板并定位
     panel.classList.add('show');
 
+    // ====== 再次强制设置位置，确保生效 ======
+    panel.style.top = '50px';
+    panel.style.left = '16px';
+    
     // 添加调试信息
     console.log(`Creating panel for node ${nodeId}`);
+    console.log(`[面板创建后] panel.style.top = ${panel.style.top}`);
     debugPanelPosition(nodeId);
 
-    updatePanelPosition(panel, nodeId);
+    // 注释掉 updatePanelPosition，避免覆盖我们的固定位置
+    // updatePanelPosition(panel, nodeId);
 
     return panel;
 }
@@ -723,21 +837,26 @@ function updatePanelPosition(panel, nodeId) {
     // 确保面板不会超出视口边界
     const finalLeft = Math.max(10, Math.min(left, window.innerWidth - panelWidth - 10));
 
-    // 智能计算垂直位置，考虑面板扩展方向
-    const finalTop = calculateOptimalPanelTop(panel, nodeRect);
-
     const sticky = panel.getAttribute("data-sticky");
     // 固定贴在屏幕左侧显示
-    // panel.style.left = `${finalLeft}px`;
     panel.style.left = sticky == "true" ? `${finalLeft}px` : `16px`;
-    panel.style.top = `${finalTop}px`;
+    
+    // ============== 关键修改：强制工具栏往下移 ==============
+    // 不再调用 calculateOptimalPanelTop，直接设置一个固定的、远离顶部的位置
+    const FORCED_TOP_OFFSET = 50;  // 强制距离页面顶部 50px
+    
+    // 直接设置为固定值，不再依赖任何计算
+    panel.style.top = `${FORCED_TOP_OFFSET}px`;
+    
+    console.log(`[Panel ${nodeId}] 强制设置位置: top=${FORCED_TOP_OFFSET}px`);
 }
 
 // 计算面板的最优垂直位置
 function calculateOptimalPanelTop(panel, nodeRect) {
-    const margin = 20;
+    const topMargin = 100;  // 顶部留出更多空间，避免工具栏贴顶（从 20 调整为 100）
+    const bottomMargin = 20;
     const panelHeight = panel.offsetHeight;
-    const baseOffset = 40; // 整体向下偏移
+    const baseOffset = 80; // 整体向下偏移
 
     // 直接使用相对于视口的位置（与test-panel.html保持一致）
     const idealTop = nodeRect.top + nodeRect.height / 2 - panelHeight / 2;
@@ -746,27 +865,27 @@ function calculateOptimalPanelTop(panel, nodeRect) {
     let finalTop = idealTop;
 
     // 关键判断：面板是否会超出屏幕底部
-    const willExceedBottom = idealBottom > window.innerHeight - margin;
+    const willExceedBottom = idealBottom > window.innerHeight - bottomMargin;
     if (willExceedBottom) {
         // 向上扩展：将面板底部对齐到屏幕底部
-        finalTop = window.innerHeight - panelHeight - margin;
+        finalTop = window.innerHeight - panelHeight - bottomMargin;
 
         // 如果向上扩展后顶部空间不足，则居中显示
-        if (finalTop < margin) {
-            finalTop = Math.max(margin, (window.innerHeight - panelHeight) / 2);
+        if (finalTop < topMargin) {
+            finalTop = Math.max(topMargin, (window.innerHeight - panelHeight) / 2);
         }
-    } else if (idealTop < margin) {
-        // 如果面板会超出屏幕顶部, 向下扩展：将面板顶部对齐到屏幕顶部
-        finalTop = margin;
+    } else if (idealTop < topMargin) {
+        // 如果面板会超出屏幕顶部, 向下扩展：将面板顶部至少从 topMargin 开始
+        finalTop = topMargin;
     } else {
         // 如果面板完全在屏幕内，保持理想位置
         finalTop = idealTop;
     }
 
-    // 应用整体下移偏移量，并再次夹取边界
+    // 应用整体下移偏移量，并再次夹取边界（确保不会低于 topMargin）
     finalTop = Math.min(
-        Math.max(finalTop + baseOffset, margin),
-        window.innerHeight - panelHeight - margin
+        Math.max(finalTop + baseOffset, topMargin),
+        window.innerHeight - panelHeight - bottomMargin
     );
 
     return finalTop;
@@ -1194,7 +1313,9 @@ function addToolCallToNodePanel(nodeId, tool) {
 function updateAllPanelPositions() {
     nodeToolPanels.forEach((panel, nodeId) => {
         if (panel.classList.contains('show')) {
-            updatePanelPosition(panel, nodeId);
+            // 强制设置固定位置，不调用 updatePanelPosition 避免复杂计算
+            panel.style.top = '50px';
+            panel.style.left = '16px';
         }
     });
 }

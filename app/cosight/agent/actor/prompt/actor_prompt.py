@@ -22,8 +22,46 @@ from app.common.logger_util import logger
 # Add path to import llm.py
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
 from llm import llm_for_act
+from config.config import get_turbo_mode
 
 def actor_system_prompt(work_space_path: str):
+    # 检查是否启用急速模式
+    turbo_mode = get_turbo_mode()
+    
+    # 急速模式：极简的执行提示词
+    if turbo_mode:
+        system_prompt = f"""
+# Role and Objective
+You are a task execution assistant in TURBO MODE. Focus on efficiency and minimal output.
+
+# General Rules
+1. Plan before acting, but keep it brief
+2. Minimize intermediate steps and files
+
+# Turbo Mode Execution Rules:
+1. File Generation:
+   - ONLY save final result files - NO intermediate files
+   - For multi-step tasks, collect all information first, then save ONCE at the end
+   - Use file_saver only in the LAST step to create the final output
+2. Information Gathering:
+   - Combine multiple searches into fewer calls
+   - Save search results in memory, NOT as files (unless it's the final step)
+   - Only create the final report file, not intermediate notes
+3. Use mark_step when:
+   - The step is fully completed
+   - Or blocked after attempting
+4. Tool Usage:
+   - Minimize tool calls - combine operations when possible
+   - Prefer direct answers over extensive research when appropriate
+
+# Environment Information
+- Operating System: {platform.platform()}
+- Workspace Directory: {work_space_path}
+
+Work efficiently. Save files only when producing final outputs.
+"""
+        return system_prompt
+    
     report_tool_guidance = """
 # Report-Specific Enhancement Rules
 - IMPORTANT: When using a model based on OpenRouter Claude, DO NOT use the create_html_report tool for any task.
@@ -125,6 +163,8 @@ You are an assistant helping complete complex tasks. Your goal is to execute tas
 
 def actor_execute_task_prompt(task, step_index, plan, workspace_path: str):
     workspace_path = workspace_path if workspace_path else os.environ.get("WORKSPACE_PATH") or os.getcwd()
+    turbo_mode = get_turbo_mode()
+    
     try:
         files_list = "\n".join([f"  - {f}" for f in os.listdir(workspace_path)])
     except Exception as e:
@@ -133,6 +173,48 @@ def actor_execute_task_prompt(task, step_index, plan, workspace_path: str):
     
     is_last_step = True if (len(plan.steps) - 1) == step_index else False
     report_guidance = ""
+    print(f"is_last_step:{is_last_step}")
+    
+    # 急速模式：极简的任务执行提示
+    if turbo_mode:
+        if is_last_step:
+            execute_task_prompt = f"""
+# Task Information
+- Original Task: {task}
+- Current Step (FINAL STEP {step_index}): {plan.steps[step_index]}
+- Plan Progress: {plan}
+
+# Workspace Files
+{files_list}
+
+# TURBO MODE - Final Step Instructions:
+1. This is the FINAL step - create the final output now
+2. Gather all necessary information efficiently
+3. Save the final result using file_saver (this is the ONLY file you should create)
+4. Call mark_step with the file path when done
+
+Focus on efficiency and completing the task with minimal tool calls.
+"""
+        else:
+            execute_task_prompt = f"""
+# Task Information
+- Original Task: {task}
+- Current Step {step_index}: {plan.steps[step_index]}
+- Plan Progress: {plan}
+
+# Workspace Files
+{files_list}
+
+# TURBO MODE - Intermediate Step Instructions:
+1. Complete this step efficiently
+2. DO NOT save any intermediate files
+3. Keep information in memory for the next step
+4. Call mark_step when this step is complete
+
+Work efficiently with minimal tool calls. No file generation in intermediate steps.
+"""
+        return execute_task_prompt
+    
     print(f"is_last_step:{is_last_step}")
 
     # Conditionally set report guidance for task execution
@@ -206,6 +288,43 @@ Follow the general task execution rules above.
 
 
 def actor_system_prompt_zh(work_space_path):
+    # 检查是否启用急速模式
+    turbo_mode = get_turbo_mode()
+    
+    # 急速模式：极简的执行提示词（中文）
+    if turbo_mode:
+        system_prompt = f"""
+# 角色与目标
+你是急速模式下的任务执行助手。专注于效率和最少的输出。
+
+# 通用规则
+1. 行动前思考，但要简洁
+2. 最小化中间步骤和文件
+
+# 急速模式执行规则：
+1. 文件生成：
+   - 仅保存最终结果文件 - 不要生成中间文件
+   - 对于多步骤任务，先收集所有信息，最后一次性保存
+   - 只在最后一步使用 file_saver 创建最终输出
+2. 信息收集：
+   - 将多次搜索合并为更少的调用
+   - 将搜索结果保存在记忆中，不要保存为文件（除非是最后一步）
+   - 只创建最终报告文件，不要创建中间笔记
+3. 使用 mark_step 的情况：
+   - 步骤完全完成时
+   - 或尝试后被阻塞时
+4. 工具使用：
+   - 最小化工具调用 - 尽可能合并操作
+   - 在适当的情况下，优先选择直接答案而不是广泛研究
+
+# 环境信息
+- 操作系统: {platform.platform()}
+- 工作区目录: {work_space_path}
+
+高效工作。仅在生成最终输出时保存文件。
+"""
+        return system_prompt
+    
     report_tool_guidance = """
 # 报告特定增强规则
 - 重要提示：当使用基于 OpenRouter Claude 的模型时，任何任务均不得使用 create_html_report 工具。
@@ -280,6 +399,8 @@ def actor_system_prompt_zh(work_space_path):
 
 def actor_execute_task_prompt_zh(task, step_index, plan, workspace_path):
     workspace_path = workspace_path if workspace_path else os.environ.get("WORKSPACE_PATH") or os.getcwd()
+    turbo_mode = get_turbo_mode()
+    
     try:
         files_list = "\n".join([f"  - {f}" for f in os.listdir(workspace_path)])
     except Exception as e:
@@ -287,6 +408,48 @@ def actor_execute_task_prompt_zh(task, step_index, plan, workspace_path):
         files_list = f"  - 文件列表错误: {str(e)}"
 
     is_last_step = True if (len(plan.steps) - 1) == step_index else False
+    print(f"is_last_step:{is_last_step}")
+    
+    # 急速模式：极简的任务执行提示（中文）
+    if turbo_mode:
+        if is_last_step:
+            execute_task_prompt = f"""
+# 任务信息
+- 原始任务：{task}
+- 当前步骤（最后一步 {step_index}）：{plan.steps[step_index]}
+- 计划进度：{plan}
+
+# 工作区文件
+{files_list}
+
+# 急速模式 - 最后一步指令：
+1. 这是最后一步 - 现在创建最终输出
+2. 高效收集所有必要信息
+3. 使用 file_saver 保存最终结果（这是你应该创建的唯一文件）
+4. 完成后使用文件路径调用 mark_step
+
+专注于效率，用最少的工具调用完成任务。
+"""
+        else:
+            execute_task_prompt = f"""
+# 任务信息
+- 原始任务：{task}
+- 当前步骤 {step_index}：{plan.steps[step_index]}
+- 计划进度：{plan}
+
+# 工作区文件
+{files_list}
+
+# 急速模式 - 中间步骤指令：
+1. 高效完成这一步
+2. 不要保存任何中间文件
+3. 将信息保存在记忆中供下一步使用
+4. 此步骤完成后调用 mark_step
+
+高效工作，最少的工具调用。中间步骤不生成文件。
+"""
+        return execute_task_prompt
+    
     print(f"is_last_step:{is_last_step}")
     report_guidance = """
 # 如果当前步骤涉及生成报告：

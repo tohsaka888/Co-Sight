@@ -668,7 +668,8 @@ body {
     padding: 12px;
     border-radius: 8px;
     font-size: 14px;
-    pointer-events: auto;
+    /* 默认不拦截鼠标事件，避免挡住节点 */
+    pointer-events: none;
     z-index: 1000;
     max-width: 450px;
     min-width: 300px;
@@ -678,6 +679,11 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.1);
     opacity: 0;
     transition: opacity 0.2s ease;
+}
+
+/* 当鼠标悬停在 tooltip 上时，启用鼠标事件以支持滚动 */
+.tooltip.hover-active {
+    pointer-events: auto;
 }
 
 .tooltip a {

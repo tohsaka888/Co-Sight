@@ -27,8 +27,49 @@ import requests
 from app.common.logger_util import logger
 from .scrape_website_toolkit import is_valid_url
 
-# 禁用SSL警告
+# 禁用 requests 中的 InsecureRequestWarning（仅在显式关闭 verify 时才会触发）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def _build_ssl_context_for_fetch() -> ssl.SSLContext | None:
+    """
+    为异步抓取构建 SSL 上下文。
+
+    设计原则（开源安全注意事项）：
+    - 默认行为：严格校验证书（相比修改系统 CA，更推荐用户在系统层正确安装证书）
+    - 可选配置：
+        - FETCH_CA_FILE: 指定自定义 CA 证书文件路径，用于公司代理 / 私有 CA 场景
+        - FETCH_SSL_VERIFY=false: 仅在本地/内网调试时临时关闭 SSL 校验（不推荐生产环境使用）
+    - 返回值：
+        - None：交给 aiohttp 使用默认 SSL 行为（等价于严格校验）
+        - SSLContext：按 env 配置生成的上下文
+    """
+    # 是否显式关闭 SSL 校验（默认不关闭）
+    verify_flag = os.environ.get("FETCH_SSL_VERIFY", "").strip().lower()
+    if verify_flag in ("0", "false", "no", "off"):
+        # 仅用于调试环境：完全关闭证书校验
+        logger.warning(
+            "FETCH_SSL_VERIFY is set to false: SSL certificate verification is DISABLED for fetch_url_content. "
+            "This is unsafe and NOT recommended for production environments."
+        )
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+    # 如需信任自定义 CA（常见于公司代理或自签名证书场景）
+    ca_file = os.environ.get("FETCH_CA_FILE", "").strip()
+    if ca_file:
+        try:
+            ctx = ssl.create_default_context(cafile=ca_file)
+            logger.info(f"Using custom CA file for fetch_url_content: {ca_file}")
+            return ctx
+        except Exception as e:
+            logger.error(f"Failed to load custom CA file '{ca_file}', fallback to default SSL context: {e}")
+            # 失败则退回默认行为
+
+    # 返回 None，交由 aiohttp 使用默认 SSL 行为（严格校验）
+    return None
 
 
 def _resolve_baidu_redirect(session: requests.Session, url: str, timeout: int = 8) -> str:
@@ -181,7 +222,14 @@ async def fetch_url_content(url: str) -> str:
         if not is_valid_url(url):
             return f'current url is valid {url}'
         timeout = aiohttp.ClientTimeout(total=180)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+
+        # 根据开源安全规范构建 SSL 上下文：
+        # - 默认严格校验证书
+        # - 支持通过环境变量配置自定义 CA 或在开发环境下关闭校验
+        ssl_ctx = _build_ssl_context_for_fetch()
+        connector = aiohttp.TCPConnector(ssl=ssl_ctx) if ssl_ctx is not None else None
+
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             async with session.get(url, headers=headers, proxy=proxy) as response:
                 if response.status == 200:
                     # Check content type

@@ -20,6 +20,10 @@ def planner_system_prompt(question):
     # Add path to import llm.py
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
     from llm import llm_for_plan
+    from config.config import get_turbo_mode
+    
+    # 检查是否启用急速模式
+    turbo_mode = get_turbo_mode()
     
     # 检查是否使用Claude模型
     is_claude = False
@@ -28,6 +32,66 @@ def planner_system_prompt(question):
             is_claude = True
     contains_chinese = any('\u4e00' <= c <= '\u9fff' for c in question)
 
+    # 急速模式：极简的规划提示词
+    if turbo_mode:
+        if contains_chinese:
+            system_prompt = """
+# 角色与目标
+你是一个高效的计划助手。在急速模式下，你的任务是创建最精简的行动计划。
+
+# 急速模式核心原则
+1. 计划步骤：最多2-3步，能合并的一定合并
+2. 直接输出答案：如果问题简单明确，直接返回答案，不要规划
+3. 避免过度规划：只关注核心必要步骤
+
+# 计划创建规则
+1. 创建2-3个高层步骤，每个步骤要完成尽可能多的任务
+2. 合并相关步骤：信息收集+分析可以合并为一步
+3. 使用以下格式：
+   - 标题：计划标题
+   - 步骤：[步骤1, 步骤2]
+   - 依赖项：{步骤索引: [依赖步骤索引]}
+4. 示例：对于"研究某个主题并生成报告"，只需要：
+   步骤1: 信息搜集与分析
+   步骤2: 生成最终报告
+
+# 重新规划规则
+1. 如果计划可以继续，返回："计划无需修改，继续执行"
+2. 只在严重问题时才调整计划
+
+# 最终化规则
+1. 简洁总结成功或失败原因
+"""
+        else:
+            system_prompt = """
+# Role and Objective
+You are an efficient planning assistant. In turbo mode, create the most streamlined action plans.
+
+# Turbo Mode Core Principles
+1. Plan steps: Maximum 2-3 steps, merge whenever possible
+2. Direct answers: For simple questions, return the answer directly without planning
+3. Avoid over-planning: Focus only on core essential steps
+
+# Plan Creation Rules
+1. Create 2-3 high-level steps, each accomplishing as much as possible
+2. Merge related steps: Information gathering + analysis can be one step
+3. Use the following format:
+   - title: plan title
+   - steps: [step1, step2]
+   - dependencies: {step_index: [dependent_step_index]}
+4. Example: For "research a topic and create a report", only need:
+   Step 1: Information collection and analysis
+   Step 2: Generate final report
+
+# Replanning Rules
+1. If plan can continue, return: "Plan does not need adjustment, continue execution"
+2. Only adjust plan for serious issues
+
+# Finalization Rules
+1. Brief summary of success or failure
+"""
+        return system_prompt
+    
     # 根据模型类型调整规划指导
     if is_claude and contains_chinese:
         system_prompt = """
@@ -220,6 +284,10 @@ def planner_create_plan_prompt(question, output_format=""):
     # Add path to import llm.py
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
     from llm import llm_for_plan
+    from config.config import get_turbo_mode
+    
+    # 检查是否启用急速模式
+    turbo_mode = get_turbo_mode()
     
     # 检查是否使用Claude模型
     is_claude = False
@@ -228,8 +296,28 @@ def planner_create_plan_prompt(question, output_format=""):
             is_claude = True
     contains_chinese = any('\u4e00' <= c <= '\u9fff' for c in question)
 
+    # 急速模式：极简的计划创建提示
+    if turbo_mode:
+        if contains_chinese:
+            create_plan_prompt = f"""
+创建一个仅包含 2-3 个步骤的极简计划来完成任务：{question}
+
+急速模式要求：
+- 步骤1通常是：信息收集与分析（合并多个搜索和分析）
+- 步骤2通常是：生成最终结果
+- 能一步完成的绝不分两步
+"""
+        else:
+            create_plan_prompt = f"""
+Create a minimal plan with only 2-3 steps to accomplish: {question}
+
+Turbo mode requirements:
+- Step 1 typically: Information collection and analysis (merge multiple searches)
+- Step 2 typically: Generate final result
+- Never split what can be done in one step
+"""
     # 根据模型类型提供不同的规划指导
-    if is_claude and contains_chinese:
+    elif is_claude and contains_chinese:
         create_plan_prompt = f"""
 创建一个包含 3-5 个步骤的简洁且聚焦的计划以完成此任务：{question}
 请记住保持步骤简洁，并仅包含真正必要的内容。
@@ -249,7 +337,8 @@ Remember to keep steps concise and only include what's truly necessary.
 """
     else:
         create_plan_prompt = f"""
-Using the create_plan tool, create a detailed plan to accomplish this task: {question}
+Using the create_plan tool, create a detailed plan of 3-5 steps to accomplish this task: {question},
+
 """
 
     if contains_chinese:
@@ -271,7 +360,11 @@ def planner_re_plan_prompt(question, plan, output_format=""):
     # 添加路径以导入 llm.py
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../")))
     from llm import llm_for_plan
+    from config.config import get_turbo_mode
 
+    # 检查是否启用急速模式
+    turbo_mode = get_turbo_mode()
+    
     # 检查是否使用 Claude 模型
     is_claude = False
     if hasattr(llm_for_plan, 'model') and isinstance(llm_for_plan.model, str):
@@ -281,6 +374,37 @@ def planner_re_plan_prompt(question, plan, output_format=""):
     # 判断是否包含中文
     contains_chinese = any('\u4e00' <= c <= '\u9fff' for c in question)
 
+    # 急速模式：极简的重新规划提示
+    if turbo_mode:
+        if contains_chinese:
+            replan_prompt = f"""
+原始任务：{question}
+当前计划状态：
+{plan}
+
+急速模式重新规划：
+- 大部分情况下返回："计划无需修改，继续执行"
+- 只有在严重错误时才调整计划
+- 调整时保持步骤数最少（2-3步）
+"""
+        else:
+            replan_prompt = f"""
+Original task: {question}
+Current plan status:
+{plan}
+
+Turbo mode replanning:
+- Most cases: return "Plan does not need adjustment, continue execution"
+- Only adjust for serious errors
+- Keep steps minimal when adjusting (2-3 steps)
+"""
+        if output_format:
+            if contains_chinese:
+                replan_prompt += f"\n确保你的最终答案仅包含以下格式的内容：{output_format}"
+            else:
+                replan_prompt += f"\nEnsure your final answer contains only the content in the following format: {output_format}"
+        return replan_prompt
+    
     if contains_chinese:
         replan_prompt = f"""
 原始任务：{question}

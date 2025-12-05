@@ -30,6 +30,7 @@ from app.cosight.tool.tool_result_processor import ToolResultProcessor
 from app.cosight.task.plan_report_manager import plan_report_event_manager
 from app.common.logger_util import logger
 from app.cosight.agent.base.tool_arg_mapping import FUNCTION_ARG_MAPPING
+from config.config import get_turbo_mode
 
 
 class BaseAgent:
@@ -59,11 +60,26 @@ class BaseAgent:
         - 基于目标函数签名的参数集合，仅对存在于签名的参数进行填充
         - 使用通用别名表进行匹配（如 file->filename, filepath->filename, text->content 等）
         - 支持无下划线/大小写不敏感匹配
-        - 不在签名内的键保持原样（以便函数可接收 **kwargs）
+        - 只保留工具所需的参数，移除所有不在工具定义中的参数（如 save_mode）
         """
         try:
             signature = inspect.signature(function_to_call)
             param_names = set(signature.parameters.keys())
+
+            # 尝试从工具定义中获取参数 schema
+            tool_schema_params = set()
+            if hasattr(self, 'tools') and self.tools:
+                for tool in self.tools:
+                    if isinstance(tool, dict) and tool.get('function', {}).get('name') == function_name:
+                        params_schema = tool.get('function', {}).get('parameters', {})
+                        if isinstance(params_schema, dict) and 'properties' in params_schema:
+                            tool_schema_params = set(params_schema['properties'].keys())
+                            break
+
+            # 合并函数签名参数和工具 schema 参数（优先使用函数签名）
+            valid_param_names = param_names if param_names else tool_schema_params
+            if not valid_param_names and tool_schema_params:
+                valid_param_names = tool_schema_params
 
             def normalize_key(k: str) -> str:
                 return (k or '').replace('_', '').lower()
@@ -80,7 +96,7 @@ class BaseAgent:
 
             normalized_args: Dict[str, Any] = dict(raw_args) if isinstance(raw_args, dict) else {}
 
-            # 将别名键映射到签名中的canonical键；保留未映射键
+            # 将别名键映射到签名中的canonical键；只保留有效参数
             produced: Dict[str, Any] = {}
             used_keys = set()
 
@@ -88,7 +104,7 @@ class BaseAgent:
                 key_norm = normalize_key(key)
 
                 # 如果原键就在签名里，直接使用
-                if key in param_names:
+                if key in valid_param_names:
                     produced[key] = val
                     used_keys.add(key)
                     continue
@@ -96,30 +112,33 @@ class BaseAgent:
                 # 尝试用别名反查canonical
                 if key_norm in alias_reverse:
                     canonical = alias_reverse[key_norm]
-                    if canonical in param_names and canonical not in produced:
+                    if canonical in valid_param_names and canonical not in produced:
                         produced[canonical] = val
                         used_keys.add(key)
                         logger.info(f"Tool args normalized: {key} -> {canonical}")
                         continue
 
                 # 尝试模糊：将签名参数做无下划线匹配
-                for p in param_names:
+                for p in valid_param_names:
                     if normalize_key(p) == key_norm and p not in produced:
                         produced[p] = val
                         used_keys.add(key)
                         logger.info(f"Tool args normalized (fuzzy): {key} -> {p}")
                         break
 
-            # 把未用上的原始键（可能用于 **kwargs）补回
-            for key, val in normalized_args.items():
-                if key not in used_keys and key not in produced:
-                    produced[key] = val
+            # 不再保留未映射的键，只保留工具所需的参数
+            # 这样可以避免 LLM 生成的额外字段（如 save_mode）被传递到工具函数
 
             # 必填项校验（若配置了 required）
             required = mapping_cfg.get('required', [])
-            missing = [r for r in required if r in param_names and r not in produced]
+            missing = [r for r in required if r in valid_param_names and r not in produced]
             if missing:
                 logger.warning(f"Missing required args for {function_name}: {missing}")
+
+            # 记录被移除的参数（用于调试）
+            removed_keys = set(normalized_args.keys()) - used_keys
+            if removed_keys:
+                logger.info(f"Removed invalid args for {function_name}: {removed_keys}")
 
             return produced
         except Exception as e:
@@ -363,14 +382,25 @@ class BaseAgent:
         return []
 
     def execute(self, messages: List[Dict[str, Any]], step_index=None, max_iteration=10):  #调试修改的10
+        # 急速模式：减少迭代次数
+        turbo_mode = get_turbo_mode()
+        if turbo_mode:
+            max_iteration = min(max_iteration, 5)  # 急速模式下最多5次迭代
+            logger.info(f"Turbo mode enabled: max_iteration reduced to {max_iteration}")
+        
         for i in range(max_iteration):
-            logger.info(f'act agent call with tools message: {messages}')
+            # 为了避免日志过大，这里不再打印完整 messages，只记录关键元信息
+            logger.info(f"act agent call with tools start: iter={i}, step_index={step_index}, "
+                        f"msg_count={len(messages)}, tools_count={len(self.tools)}")
             response = self.llm.create_with_tools(messages, self.tools)
-            logger.info(f'act agent call with tools response: {response}')
 
             # Process initial response
             result = self._process_response(response, messages, step_index)
-            logger.info(f'iter {i} for {self.agent_instance.instance_name} call tools result: {result}')
+            # result 也可能较大，这里不再完整打印，只给出是否结束的信息
+            logger.info(
+                f"iter {i} for {self.agent_instance.instance_name} call tools done, "
+                f"has_result={bool(result)}"
+            )
             if result:
                 return result
 
@@ -379,15 +409,23 @@ class BaseAgent:
         return messages[-1].get("content")
 
     def _process_response(self, response, messages, step_index):
+        # 构建 assistant 消息，支持 thinking mode 的 reasoning_content 字段
+        assistant_msg = {
+            "role": "assistant",
+            "content": response.content
+        }
+        
+        # 如果响应包含 reasoning_content（thinking mode），需要添加到消息中
+        if hasattr(response, 'reasoning_content') and response.reasoning_content:
+            assistant_msg["reasoning_content"] = response.reasoning_content
+        
         if not response.tool_calls:
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append(assistant_msg)
             return response.content
 
-        messages.append({
-            "role": "assistant",
-            "content": response.content,
-            "tool_calls": response.tool_calls
-        })
+        # 如果有 tool_calls，添加到消息中
+        assistant_msg["tool_calls"] = response.tool_calls
+        messages.append(assistant_msg)
 
         results = self._execute_tool_calls(response.tool_calls, step_index)
         messages.extend(results)
@@ -548,19 +586,73 @@ class BaseAgent:
                 "content": f"Execution error: {str(e)}"
             }
 
+    def _filter_mcp_tool_args(self, function_name: str, args_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        过滤 MCP 工具参数，只保留工具定义中需要的参数
+        
+        Args:
+            function_name: 工具名称
+            args_dict: LLM 生成的原始参数
+            
+        Returns:
+            过滤后的参数字典，只包含工具定义中定义的参数
+        """
+        try:
+            # 从工具定义中查找对应的 MCP 工具
+            if hasattr(self, 'tools') and self.tools:
+                for tool in self.tools:
+                    if isinstance(tool, dict) and tool.get('function', {}).get('name') == function_name:
+                        params_schema = tool.get('function', {}).get('parameters', {})
+                        if isinstance(params_schema, dict) and 'properties' in params_schema:
+                            valid_params = set(params_schema['properties'].keys())
+                            # 只保留在工具定义中的参数
+                            filtered = {k: v for k, v in args_dict.items() if k in valid_params}
+                            
+                            # 记录被移除的参数
+                            removed = set(args_dict.keys()) - set(filtered.keys())
+                            if removed:
+                                logger.info(f"Removed invalid MCP tool args for {function_name}: {removed}")
+                            
+                            return filtered
+            
+            # 如果找不到工具定义，尝试从 mcp_tools 中查找
+            if hasattr(self, 'mcp_tools') and self.mcp_tools:
+                for mcp_config in self.mcp_tools:
+                    for mcp_tool in mcp_config.get('mcp_tools', []):
+                        if getattr(mcp_tool, 'name', '') == function_name:
+                            input_schema = getattr(mcp_tool, 'inputSchema', {})
+                            if isinstance(input_schema, dict) and 'properties' in input_schema:
+                                valid_params = set(input_schema['properties'].keys())
+                                filtered = {k: v for k, v in args_dict.items() if k in valid_params}
+                                
+                                removed = set(args_dict.keys()) - set(filtered.keys())
+                                if removed:
+                                    logger.info(f"Removed invalid MCP tool args for {function_name}: {removed}")
+                                
+                                return filtered
+            
+            # 如果找不到工具定义，返回原始参数（向后兼容）
+            return args_dict
+        except Exception as e:
+            logger.warning(f"Failed to filter MCP tool args for {function_name}: {e}")
+            return args_dict
+
     @time_record
     def _execute_mcp_tool_call(self, function_name="", function_args="", tool_call_id=""):
         start_time = time.time()
         
         # 推送MCP工具开始执行事件
         self._push_tool_event("tool_start", function_name, function_args, step_index=-1)
-        
+        logger.info(f"execute_mcp_tool_call: function_name={function_name}, function_args={function_args}, tool_call_id={tool_call_id}")
         loop = None
         try:
             mcp_tool, tool_name = self.find_mcp_tool(function_name)
             if mcp_tool and tool_name:
                 cleaned_args = function_args.replace('\\\'', '\'')
                 args_dict = json.loads(cleaned_args or "{}")
+                
+                # 过滤参数，只保留工具所需的参数
+                args_dict = self._filter_mcp_tool_args(function_name, args_dict)
                 # Windows系统需要特殊处理
                 if sys.platform == "win32":
                     from asyncio import ProactorEventLoop

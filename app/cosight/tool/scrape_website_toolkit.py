@@ -80,7 +80,14 @@ class ScrapeWebsiteTool:
 def fetch_website_content(website_url):
     try:
         if not is_valid_url(website_url):
-            return f'current url is valid {website_url}'
+            return f'current url is not valid: {website_url}'
+        
+        # 检查URL是否指向PDF文件
+        if website_url.lower().endswith('.pdf') or _is_pdf_url(website_url):
+            logger.info(f'Detected PDF URL: {website_url}, using PDF parser instead')
+            return _fetch_pdf_content(website_url)
+        
+        # 对于普通网页，使用原有的抓取逻辑
         scrapeWebsiteTool = ScrapeWebsiteTool(website_url)
         logger.info(f'starting fetch {website_url} Content')
         # 检查是否在事件循环中
@@ -102,6 +109,167 @@ def fetch_website_content(website_url):
 from urllib.parse import urlparse, urljoin
 import requests
 import json
+import tempfile
+
+
+def _is_pdf_url(url: str) -> bool:
+    """检查URL是否指向PDF文件
+    
+    检查方法：
+    1. URL以.pdf结尾
+    2. 发送HEAD请求检查Content-Type
+    """
+    try:
+        # 方法1：检查URL扩展名
+        if url.lower().endswith('.pdf'):
+            return True
+        
+        # 方法2：检查Content-Type
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+        content_type = response.headers.get('Content-Type', '').lower()
+        
+        if 'application/pdf' in content_type:
+            logger.info(f'URL {url} is PDF (Content-Type: {content_type})')
+            return True
+        
+        return False
+    except Exception as e:
+        logger.debug(f'Error checking if URL is PDF: {e}')
+        return False
+
+
+def _is_valid_extracted_text(text: str) -> bool:
+    """检测提取的文本是否有效（不是字形编码）"""
+    if not text or len(text) < 10:
+        return False
+    
+    # 检查是否包含大量字形编码（如/G21, /G22, /GFF）
+    glyph_pattern = r'/G[0-9A-Fa-f]{2,4}'
+    glyph_matches = re.findall(glyph_pattern, text)
+    glyph_count = len(glyph_matches)
+    
+    # 计算总词数
+    total_words = len(text.split())
+    
+    # 如果字形编码超过5%，认为提取失败
+    if total_words > 0 and glyph_count > total_words * 0.05:
+        logger.warning(f"Detected {glyph_count} glyph codes, text extraction failed")
+        return False
+    
+    # 检查可读字符比例
+    readable_chars = sum(1 for c in text if c.isalnum() or c in '，。！？,.!? \n\t')
+    if len(text) > 0 and readable_chars < len(text) * 0.3:
+        return False
+    
+    return True
+
+
+def _fetch_pdf_content(pdf_url: str) -> str:
+    """使用PDF解析器提取PDF内容
+    
+    Args:
+        pdf_url: PDF文件的URL
+        
+    Returns:
+        提取的文本内容
+    """
+    import io
+    
+    logger.info(f'Fetching PDF content from: {pdf_url}')
+    
+    # 下载PDF文件
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(pdf_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        pdf_data = response.content
+    except Exception as e:
+        return f"PDF下载失败: {str(e)}。URL: {pdf_url}"
+    
+    # 方法1：pdfplumber（推荐，准确性最好）
+    try:
+        import pdfplumber
+        logger.info("Using pdfplumber for PDF extraction")
+        
+        pdf_file = io.BytesIO(pdf_data)
+        extracted_text = ""
+        
+        with pdfplumber.open(pdf_file) as pdf:
+            total_pages = len(pdf.pages)
+            for page_num, page in enumerate(pdf.pages, 1):
+                page_text = page.extract_text()
+                if page_text and page_text.strip():
+                    extracted_text += f"\n\n=== 第 {page_num}/{total_pages} 页 ===\n\n"
+                    extracted_text += page_text
+        
+        if extracted_text.strip() and _is_valid_extracted_text(extracted_text):
+            logger.info(f'pdfplumber成功提取 {len(extracted_text)} 字符')
+            return f"PDF内容提取成功（pdfplumber，共{total_pages}页）：\n{extracted_text}"
+    except ImportError:
+        logger.debug("pdfplumber未安装，尝试下一个方法")
+    except Exception as e:
+        logger.warning(f"pdfplumber提取失败: {e}")
+    
+    # 方法2：PyMuPDF/fitz（最强大）
+    try:
+        import fitz
+        logger.info("Using PyMuPDF for PDF extraction")
+        
+        doc = fitz.open(stream=pdf_data, filetype="pdf")
+        extracted_text = ""
+        total_pages = len(doc)
+        
+        for page_num in range(total_pages):
+            page_text = doc[page_num].get_text()
+            if page_text.strip():
+                extracted_text += f"\n\n=== 第 {page_num+1}/{total_pages} 页 ===\n\n"
+                extracted_text += page_text
+        
+        doc.close()
+        
+        if extracted_text.strip() and _is_valid_extracted_text(extracted_text):
+            logger.info(f'PyMuPDF成功提取 {len(extracted_text)} 字符')
+            return f"PDF内容提取成功（PyMuPDF，共{total_pages}页）：\n{extracted_text}"
+    except ImportError:
+        logger.debug("PyMuPDF未安装，尝试下一个方法")
+    except Exception as e:
+        logger.warning(f"PyMuPDF提取失败: {e}")
+    
+    # 方法3：pypdf（基础，可能有编码问题）
+    try:
+        from pypdf import PdfReader
+        logger.info("Using pypdf for PDF extraction")
+        
+        pdf_file = io.BytesIO(pdf_data)
+        reader = PdfReader(pdf_file)
+        extracted_text = ""
+        total_pages = len(reader.pages)
+        
+        for page_num, page in enumerate(reader.pages, 1):
+            page_text = page.extract_text()
+            if page_text.strip():
+                extracted_text += f"\n\n=== 第 {page_num}/{total_pages} 页 ===\n\n"
+                extracted_text += page_text
+        
+        if extracted_text.strip():
+            if _is_valid_extracted_text(extracted_text):
+                logger.info(f'pypdf成功提取 {len(extracted_text)} 字符')
+                return f"PDF内容提取成功（pypdf，共{total_pages}页）：\n{extracted_text}"
+            else:
+                logger.warning("pypdf提取的文本包含字形编码，质量较差")
+                return f"PDF解析失败：此PDF使用了特殊字体编码（如/G21等字形ID），无法正确解析。\n建议：1. 安装更强大的库：uv pip install pdfplumber PyMuPDF\n2. 或使用其他PDF来源\nURL: {pdf_url}"
+    except ImportError:
+        return f"错误：未安装PDF解析库。请安装：uv pip install pdfplumber PyMuPDF。URL: {pdf_url}"
+    except Exception as e:
+        logger.error(f'pypdf提取失败: {e}', exc_info=True)
+    
+    # 所有方法都失败
+    return f"PDF内容提取失败：尝试了多种解析方法都无法成功。此PDF可能是扫描版、加密或使用了特殊编码。URL: {pdf_url}"
 
 
 def is_valid_url(url: str) -> bool:

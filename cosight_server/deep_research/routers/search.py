@@ -277,9 +277,11 @@ async def append_create_plan(data: Any):
             # 确保队列中的数据是可JSON序列化的
             if isinstance(data, Plan):
                 # 已经在上面转换过了
+                # 先放入队列，确保计划进度立即发送到前端，不等待可信分析
                 asyncio.run_coroutine_threadsafe(plan_queue.put(plan_dict), main_loop)
                 
                 # 检查是否有新完成的步骤，触发可信分析
+                # 注意：可信分析是异步的，不会阻塞计划进度的发送
                 if hasattr(data, 'step_statuses'):
                     logger.info(f"Plan步骤状态: {data.step_statuses}")
                     for step, status in data.step_statuses.items():
@@ -303,6 +305,49 @@ async def append_create_plan(data: Any):
         logger.error(f"文件写入失败: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"未知错误: {e}", exc_info=True)
+
+
+def _clean_replay_json(json_text: str) -> str:
+    """清理 replay.json 中的不需要的字段（如 save_mode）
+    
+    解析 JSON，递归移除不需要的字段，然后重新序列化。
+    这样可以避免 LLM 生成的额外字段污染 replay.json 文件。
+    """
+    if not json_text or not json_text.strip():
+        return json_text
+    
+    try:
+        # 解析 JSON
+        data = json.loads(json_text.strip())
+        
+        # 定义需要移除的字段列表
+        fields_to_remove = ['save_mode', 'saveMode']  # 支持两种命名风格
+        
+        def remove_fields(obj):
+            """递归移除不需要的字段"""
+            if isinstance(obj, dict):
+                # 创建新字典，排除不需要的字段
+                cleaned = {}
+                for key, value in obj.items():
+                    if key not in fields_to_remove:
+                        # 递归处理嵌套对象
+                        cleaned[key] = remove_fields(value)
+                return cleaned
+            elif isinstance(obj, list):
+                # 递归处理列表中的每个元素
+                return [remove_fields(item) for item in obj]
+            else:
+                return obj
+        
+        # 清理数据
+        cleaned_data = remove_fields(data)
+        
+        # 重新序列化为 JSON
+        return json.dumps(cleaned_data, ensure_ascii=False) + '\n'
+    except (json.JSONDecodeError, Exception) as e:
+        # 如果解析失败，记录警告但返回原始文本
+        logger.warning(f"清理 replay.json 时出错，保留原始内容: {e}")
+        return json_text
 
 
 def validate_search_input(params: dict) -> dict | None:
@@ -401,7 +446,15 @@ async def search(request: Request, params: Any = Body(None)):
                     # logger.info(f"Plan对象已转换为字典: {plan_dict}")
                     data = plan_dict
 
+                    # 先放入队列，确保计划进度立即发送到前端，不等待可信分析
+                    # 将数据放入队列以便流式发送（优先处理）
+                    if plan_queue is not None and main_loop is not None:
+                        logger.info(f"Pushing Plan data to queue for plan_id: {plan_id}")
+                        # 确保 plan 数据立即放入队列，优先于可信分析
+                        asyncio.run_coroutine_threadsafe(plan_queue.put(plan_dict), main_loop)
+
                     # 检查是否有新完成的步骤，触发可信分析（仅对当前会话内未分析的步骤触发一次）
+                    # 注意：可信分析是异步的，不会阻塞计划进度的发送
                     try:
                         if hasattr(plan_obj, 'step_statuses'):
                             for step, status in plan_obj.step_statuses.items():
@@ -454,11 +507,9 @@ async def search(request: Request, params: Any = Body(None)):
                     pass
 
                 # 将数据放入队列以便流式发送
+                # 注意：Plan 数据已经在上面提前放入队列了，这里只处理非 Plan 数据
                 if plan_queue is not None and main_loop is not None:
-                    if isinstance(data, Plan):
-                        logger.info(f"Pushing Plan data to queue for plan_id: {plan_id}")
-                        asyncio.run_coroutine_threadsafe(plan_queue.put(plan_dict), main_loop)
-                    else:
+                    if not isinstance(data, Plan):  # Plan 数据已经在上面处理过了
                         # 非Plan（包括工具事件）在入队前再做一次路径改写兜底
                         safe_data = _rewrite_paths_in_payload(data)
                         logger.info(f"Pushing non-Plan data to queue: {type(data).__name__} for plan_id: {plan_id}")
@@ -564,10 +615,14 @@ async def search(request: Request, params: Any = Body(None)):
         # 持续从队列获取数据并产生响应
         last_plan_fingerprint = None  # 避免相同计划重复发送
         emitted_credibility_keys = set()  # 避免同一步骤的可信分析重复发送
+        plan_completed = False  # 标记是否已收到最终结果
+        plan_completed_time = None  # 记录收到最终结果的时间，用于尾部等待窗口
         while True:
             try:
                 # 等待队列中的数据，设置超时防止无限等待
-                data = await asyncio.wait_for(plan_queue.get(), timeout=60.0)
+                # 计划未结束时使用较长超时；计划结束后使用较短超时，仅用于收集剩余可信分析事件
+                timeout = 5.0 if plan_completed else 60.0
+                data = await asyncio.wait_for(plan_queue.get(), timeout=timeout)
                 # logger.info(f"queue_data:{data}")
 
                 # 若为可信分析事件，直接透传，避免被包装为 plan
@@ -597,13 +652,17 @@ async def search(request: Request, params: Any = Body(None)):
                     yield data
                     continue
 
-                # 计划结果完成
+                # 计划结果完成：先发送最终结果，但不立即结束循环，继续等待剩余可信分析结果
                 if isinstance(data, dict) and "result" in data and data['result']:
                     latest_plan = data
                     completed_plan = dict(latest_plan)
                     completed_plan["statusText"] = "执行完成"
                     yield {"plan": completed_plan}
-                    break
+                    # 标记为已完成，记录完成时间，后续在一个尾部时间窗口内继续收集可信分析等事件
+                    import time as _time
+                    plan_completed = True
+                    plan_completed_time = plan_completed_time or _time.monotonic()
+                    continue
 
                 # 更新最新plan数据（非工具事件）
                 latest_plan = data
@@ -621,7 +680,22 @@ async def search(request: Request, params: Any = Body(None)):
                     yield {"plan": running_plan}
 
             except asyncio.TimeoutError:
-                # 超时，仅发送保活状态。若有最新非工具计划，则基于其发送；否则发送默认等待计划
+                # 若计划已完成，则进入“尾部等待窗口”：在限定时间内即使暂时超时也继续等待，
+                # 给异步可信分析等任务留出足够时间将结果推入队列
+                if plan_completed:
+                    import time as _time
+                    # 默认尾部等待 180 秒，可根据需要调整
+                    TAIL_WINDOW_SECONDS = 180.0
+                    # 确保已记录完成时间
+                    plan_completed_time = plan_completed_time or _time.monotonic()
+                    elapsed = _time.monotonic() - plan_completed_time
+                    if elapsed >= TAIL_WINDOW_SECONDS:
+                        # 尾部等待窗口结束且在这段时间内未再收到任何事件，正常结束循环
+                        break
+                    # 还在尾部等待窗口内：不再发送“等待计划更新”保活消息，静默等待下一轮事件
+                    continue
+
+                # 计划未完成时的超时：仅发送保活状态。若有最新非工具计划，则基于其发送；否则发送默认等待计划
                 if latest_plan and isinstance(latest_plan, dict):
                     waiting_plan = dict(latest_plan)
                     waiting_plan["statusText"] = "等待计划更新..."
@@ -881,12 +955,14 @@ async def search(request: Request, params: Any = Body(None)):
                         except Exception:
                             text = ''
                     if text:
+                        # 清理 JSON 中的不需要字段（如 save_mode）
+                        cleaned_text = _clean_replay_json(text)
                         with open(replay_file_path, 'a', encoding='utf-8') as wf:
                             # 统一确保每条记录以换行结束
-                            if text.endswith('\n'):
-                                wf.write(text)
+                            if cleaned_text.endswith('\n'):
+                                wf.write(cleaned_text)
                             else:
-                                wf.write(text + '\n')
+                                wf.write(cleaned_text + '\n')
             except Exception as _e:
                 logger.error(f"写入回放文件失败: {_e}", exc_info=True)
 

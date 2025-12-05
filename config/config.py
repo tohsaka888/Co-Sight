@@ -22,10 +22,11 @@ load_dotenv(override=True)
 
 
 # ========== 大模型配置 ==========
-def get_model_config() -> dict[str, Optional[str | int | float]]:
+def get_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取API配置"""
     max_tokens = os.environ.get("MAX_TOKENS")
     temperature = os.environ.get("TEMPERATURE")
+    thinking_mode = os.environ.get("THINKING_MODE", "").strip().lower()
     os.environ['OPENAI_API_KEY'] = os.environ.get("API_KEY")
     return {
         "api_key": os.environ.get("API_KEY"),
@@ -33,12 +34,13 @@ def get_model_config() -> dict[str, Optional[str | int | float]]:
         "model": os.environ.get("MODEL_NAME"),
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("PROXY")
+        "proxy": os.environ.get("PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on")
     }
 
 
 # ========== 规划大模型配置 ==========
-def get_plan_model_config() -> dict[str, Optional[str | int | float]]:
+def get_plan_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取Plan专用API配置，如果缺少配置则退回默认"""
     plan_api_key = os.environ.get("PLAN_API_KEY")
     plan_base_url = os.environ.get("PLAN_API_BASE_URL")
@@ -50,6 +52,7 @@ def get_plan_model_config() -> dict[str, Optional[str | int | float]]:
 
     max_tokens = os.environ.get("PLAN_MAX_TOKENS")
     temperature = os.environ.get("PLAN_TEMPERATURE")
+    thinking_mode = os.environ.get("PLAN_THINKING_MODE", "").strip().lower()
 
     return {
         "api_key": plan_api_key,
@@ -57,12 +60,13 @@ def get_plan_model_config() -> dict[str, Optional[str | int | float]]:
         "model": model_name,
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("PLAN_PROXY")
+        "proxy": os.environ.get("PLAN_PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on") if thinking_mode else get_model_config().get("thinking_mode", False)
     }
 
 
 # ========== 执行大模型配置 ==========
-def get_act_model_config() -> dict[str, Optional[str | int | float]]:
+def get_act_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取Act专用API配置，如果缺少配置则退回默认"""
     act_api_key = os.environ.get("ACT_API_KEY")
     act_base_url = os.environ.get("ACT_API_BASE_URL")
@@ -74,6 +78,7 @@ def get_act_model_config() -> dict[str, Optional[str | int | float]]:
 
     max_tokens = os.environ.get("ACT_MAX_TOKENS")
     temperature = os.environ.get("ACT_TEMPERATURE")
+    thinking_mode = os.environ.get("ACT_THINKING_MODE", "").strip().lower()
 
     return {
         "api_key": act_api_key,
@@ -81,12 +86,13 @@ def get_act_model_config() -> dict[str, Optional[str | int | float]]:
         "model": model_name,
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("ACT_PROXY")
+        "proxy": os.environ.get("ACT_PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on") if thinking_mode else get_model_config().get("thinking_mode", False)
     }
 
 
 # ========== 工具大模型配置 ==========
-def get_tool_model_config() -> dict[str, Optional[str | int | float]]:
+def get_tool_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取Tool专用API配置，如果缺少配置则退回默认"""
     tool_api_key = os.environ.get("TOOL_API_KEY")
     tool_base_url = os.environ.get("TOOL_API_BASE_URL")
@@ -98,6 +104,7 @@ def get_tool_model_config() -> dict[str, Optional[str | int | float]]:
 
     max_tokens = os.environ.get("TOOL_MAX_TOKENS")
     temperature = os.environ.get("TOOL_TEMPERATURE")
+    thinking_mode = os.environ.get("TOOL_THINKING_MODE", "").strip().lower()
 
     return {
         "api_key": tool_api_key,
@@ -105,12 +112,13 @@ def get_tool_model_config() -> dict[str, Optional[str | int | float]]:
         "model": model_name,
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("TOOL_PROXY")
+        "proxy": os.environ.get("TOOL_PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on") if thinking_mode else get_model_config().get("thinking_mode", False)
     }
 
 
 # ========== 多模态大模型配置 ==========
-def get_vision_model_config() -> dict[str, Optional[str | int | float]]:
+def get_vision_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取Vision专用API配置，如果缺少配置则退回默认"""
     vision_api_key = os.environ.get("VISION_API_KEY")
     vision_base_url = os.environ.get("VISION_API_BASE_URL")
@@ -122,6 +130,7 @@ def get_vision_model_config() -> dict[str, Optional[str | int | float]]:
 
     max_tokens = os.environ.get("VISION_MAX_TOKENS")
     temperature = os.environ.get("VISION_TEMPERATURE")
+    thinking_mode = os.environ.get("VISION_THINKING_MODE", "").strip().lower()
 
     return {
         "api_key": vision_api_key,
@@ -129,12 +138,13 @@ def get_vision_model_config() -> dict[str, Optional[str | int | float]]:
         "model": model_name,
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("VISION_PROXY")
+        "proxy": os.environ.get("VISION_PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on") if thinking_mode else get_model_config().get("thinking_mode", False)
     }
 
 
 # ========== 可信信息分析大模型配置 ==========
-def get_credibility_model_config() -> dict[str, Optional[str | int | float]]:
+def get_credibility_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取可信信息分析专用API配置，如果缺少配置则退回默认"""
     credibility_api_key = os.environ.get("CREDIBILITY_API_KEY")
     credibility_base_url = os.environ.get("CREDIBILITY_API_BASE_URL")
@@ -146,6 +156,7 @@ def get_credibility_model_config() -> dict[str, Optional[str | int | float]]:
 
     max_tokens = os.environ.get("CREDIBILITY_MAX_TOKENS")
     temperature = os.environ.get("CREDIBILITY_TEMPERATURE")
+    thinking_mode = os.environ.get("CREDIBILITY_THINKING_MODE", "").strip().lower()
 
     return {
         "api_key": credibility_api_key,
@@ -153,12 +164,13 @@ def get_credibility_model_config() -> dict[str, Optional[str | int | float]]:
         "model": model_name,
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("CREDIBILITY_PROXY")
+        "proxy": os.environ.get("CREDIBILITY_PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on") if thinking_mode else get_model_config().get("thinking_mode", False)
     }
 
 
 # ========== 浏览器自动化大模型配置 ==========
-def get_browser_model_config() -> dict[str, Optional[str | int | float]]:
+def get_browser_model_config() -> dict[str, Optional[str | int | float | bool]]:
     """获取浏览器自动化专用API配置，如果缺少配置则退回默认"""
     browser_api_key = os.environ.get("BROWSER_API_KEY")
     browser_base_url = os.environ.get("BROWSER_API_BASE_URL")
@@ -170,6 +182,7 @@ def get_browser_model_config() -> dict[str, Optional[str | int | float]]:
 
     max_tokens = os.environ.get("BROWSER_MAX_TOKENS")
     temperature = os.environ.get("BROWSER_TEMPERATURE")
+    thinking_mode = os.environ.get("BROWSER_THINKING_MODE", "").strip().lower()
 
     return {
         "api_key": browser_api_key,
@@ -177,7 +190,8 @@ def get_browser_model_config() -> dict[str, Optional[str | int | float]]:
         "model": model_name,
         "max_tokens": int(max_tokens) if max_tokens and max_tokens.strip() else None,
         "temperature": float(temperature) if temperature and temperature.strip() else None,
-        "proxy": os.environ.get("BROWSER_PROXY")
+        "proxy": os.environ.get("BROWSER_PROXY"),
+        "thinking_mode": thinking_mode in ("1", "true", "yes", "enabled", "on") if thinking_mode else get_model_config().get("thinking_mode", False)
     }
 
 
@@ -185,6 +199,12 @@ def get_browser_model_config() -> dict[str, Optional[str | int | float]]:
 def get_tavily_config() -> Optional[str]:
     """获取tavily兼容API配置"""
     return os.environ.get("TAVILY_API_KEY")
+
+
+def get_turbo_mode() -> bool:
+    """获取急速模式配置"""
+    turbo_mode = os.environ.get("TURBO_MODE", "").strip().lower()
+    return turbo_mode in ("1", "true", "yes", "enabled", "on")
 
 
 def validate_config(config: dict) -> bool:

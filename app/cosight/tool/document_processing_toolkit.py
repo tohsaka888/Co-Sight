@@ -135,7 +135,7 @@ class DocumentProcessingToolkit:
             if document_path.endswith(".pdf"):
                 # try using pypdf to extract text from pdf
                 try:
-                    from PyPDF2 import PdfReader
+                    from pypdf import PdfReader
                     if is_url:
                         tmp_path = self._download_file(document_path)
                         document_path = tmp_path

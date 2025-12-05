@@ -97,7 +97,7 @@ class TaskActorAgent(BaseAgent):
         code_toolkit = CodeToolkit(sandbox="subprocess")
         all_functions = {"mark_step": act_toolkit.mark_step,
                          # "deep_search": deep_search_toolkit.deep_search,
-                         "search_baidu": search_baidu,
+                        #  "search_baidu": search_baidu,
                          "search_google": search_toolkit.search_google,
                          "search_wiki": search_toolkit.search_wiki,
                          "tavily_search": search_toolkit.tavily_search,
